@@ -19,7 +19,9 @@ Stage 1 (no-MMU M-mode Linux) is in `doc/stage1_plan.md`.
   - `verif/qerv/tests/s2_mmu.S` passes in lockstep (permissions, SUM/MXR, A/D, reserved
     PTEs, misaligned superpage, sfence, LR/SC/AMO, delegated faults).
   - riscv-tests `rv32ui-v` (demand-paged SV32, riscv-tests env/v) 41/41 at W=4.
-  - Fit: core + MMU 1,827 logic (22%), 829 FF, 3 BSRAM (RF + 2 TLB), Fmax 41.5 MHz.
+  - Fit: core + MMU 1,827 logic (22%), 829 FF, 3 BSRAM (RF + 2 TLB), Fmax 41.5 MHz. With the
+    timing restructure and the micro-TLB (`fit/qerv_linux/run_fit.sh 4 1`): 1,960 logic
+    (23%), 956 FF, Fmax 46.7 MHz.
 - **Bugs found on the way:**
   - The RF writes of a trap's epc/tval trail the counter, and their RF address depends on
     the trap target. That target came from the privilege, which changes at the end of the
@@ -34,6 +36,13 @@ Stage 1 (no-MMU M-mode Linux) is in `doc/stage1_plan.md`.
     address combinationally (LOOK issued the request), and the PTE check sat right behind
     the SoC's read-data mux. The request now goes out from ACC with the registered PPN, and
     PTEs are registered and checked in PCHK (one extra cycle per access).
+  - The micro-TLB fast path (below) first missed 42 MHz (38.7 MHz): its VPN compare gated
+    the ibus strobe, and `servile_arbiter` selects the address with that strobe, so the
+    compare fed the cache RAM address and the whole read-data mux. The MMU now merges
+    fetches, data and PTE reads onto one physical bus (out through the AMO unit on the dbus
+    port; the ibus port is idle), selected by the core's registered `ibus_cyc` and the walk
+    state. `qerv_cpu` reports physical fetches on `o_dbg_fetch`/`o_dbg_pc` for the testbench
+    trace and the SoC profiler.
 - **S2-M3 SoC:**
   - `SMODE=1 fpga/build.sh`: logic 4,932/8,640 (58%), BSRAM 13/26, cpu_clk Fmax 39.7 MHz
     against 36. The worst path is the stage-1 arbiter / read-mux path again.
@@ -57,6 +66,25 @@ Stage 1 (no-MMU M-mode Linux) is in `doc/stage1_plan.md`.
   - **Standalone:** the stage-2 bitstream is in the FPGA's internal flash (openFPGALoader
     `-f`, 12 s). After a reconfigure from it (as at power-on), the board autoboots Linux to
     `~ #` with no host commands.
+- **Boot time** (MMU kernel; "B" is the time from the `B` command, "power-on" the time
+  from the boot ROM prompt to `~ #`):
+
+  | Step | B | Power-on |
+  | --- | --- | --- |
+  | First boot (36 MHz) | 55.0 s | 60.6 s |
+  | `CONFIG_LEGACY_PTYS` off (`pty_init`: 44 s, found with `initcall_debug`) | 20.6 s | |
+  | `__div64_32` with hardware divides (kernel patch) | 20.2 s | |
+  | 42 MHz CPU (memory_clk 84 MHz) + RNG seeded from the DT | 14.1 s | 19.3 s |
+  | Micro-TLB: last page per bus, skips the TLB lookup (2 cycles per access) | 12.0 s | 17.1 s |
+
+  The micro-TLB moved `Run /init` from 10.37 s to 8.87 s of kernel time. In the simulated
+  profile, the same kernel functions lost 2–2.7 cycles per instruction (memcpy 23.2 → 20.8,
+  `__update_load_avg_se` 27.2 → 24.5). Build: logic
+  4,913/8,640 (57%), BSRAM 14/26 (the boot ROM is 4 KB = 2 blocks), cpu_clk Fmax 42.004 MHz
+  against 42; the worst paths are now the reset fan-out.
+
+  The stage-1 kernel also gained: 43 s down to 20.6 s from the pty change, measured on the
+  stage-2 CPU (which also runs it, with `b`).
 
 ## Goal and definition of done
 
@@ -129,12 +157,19 @@ other than the timer, SMP.
 | Traps | a delegated trap writes the S CSRs and jumps to stvec. Page faults: the data side reuses the misaligned-access trap path (address already in bufreg → tval). Fetch faults reuse the interrupt path (the fetched word is replaced by a trap, and tval = PC) |
 | time | `time`/`timeh` read a 64-bit mtime input from the CLINT |
 
-## MMU (`rtl/qerv/sv32_mmu.v`, between the core's ibus/dbus and the bus arbiter)
+## MMU (`rtl/qerv/sv32_mmu.v`, between the core's ibus/dbus and one physical bus)
 
 - **When it translates:** only when priv ≤ S and `satp.MODE` = 1. M-mode is untranslated
   (MPRV is not implemented).
-- **Lookup:** one BSRAM read, then a tag/permission check. It adds ~2 cycles to each memory
-  access (a load/store is ~22 cycles).
+- **Micro-TLB:** each bus (fetch, data) keeps its last translated page: VPN, PPN and the
+  D/U/X/W/R flags. A request in that page whose cached flags allow it under the current
+  privilege, SUM, MXR and access type goes out straight from IDLE, at no extra cost over an
+  untranslated access. Only the strobe depends on the VPN compare: the physical address is
+  always the micro-TLB PPN plus the offset. The entries refill on every TLB hit and clear
+  with the TLB (`sfence.vma`, reset). `s2_mmu.S` test 11 covers same-page accesses with
+  changed rights and an sfence with the entry still live.
+- **Lookup** (micro-TLB miss): one BSRAM read, then a tag/permission check. It adds 2
+  cycles to the access (a load/store is ~22 cycles).
 - **Permissions:**
   - V; R/W/X; U against priv; SUM for S loads/stores to U pages (S never executes U pages);
     MXR.

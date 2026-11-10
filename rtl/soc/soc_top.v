@@ -86,11 +86,10 @@ module soc_top #(
       .o_dbus_we  (dbus_we),
       .o_dbus_cyc (dbus_cyc),
       .i_dbus_rdt (dbus_rdt),
-      .i_dbus_ack (dbus_ack)
+      .i_dbus_ack (dbus_ack),
+      .o_dbg_fetch(o_dbg_fetch),
+      .o_dbg_pc   (o_dbg_pc)
   );
-
-  assign o_dbg_fetch = ibus_ack;
-  assign o_dbg_pc    = ibus_adr;
 
   wire [31:0] m_adr, m_dat, m_rdt;
   wire [ 3:0] m_sel;

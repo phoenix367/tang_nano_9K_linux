@@ -41,8 +41,34 @@ PY
 cd "$GOWIN_PATH/Programmer/bin"
 # cable-index 4 = "USB Debugger A", the board's BL702; --location from the cable scan
 LOC=$(./programmer_cli --scan-cables 2>&1 | sed -n 's#.*Cable found:  USB Debugger A/0/\([0-9]*\)/.*#\1#p' | head -1)
-# Erase the FPGA's SRAM first: with a design running (e.g. ours, loaded from the internal
-# flash) the GAO-bridge write crawls (>12 min instead of ~1 min).
-./programmer_cli --device GW1NR-9C --run 24 --cable-index 4 --location "${LOC:-0}" > /dev/null
-./programmer_cli --device GW1NR-9C --run 38 --mcuFile "$IMG/flash.bin" --spiaddr 0x000000 \
-    --cable-index 4 --location "${LOC:-0}" 2>&1 | tr '\r' '\n' | grep -av '%' | grep -av '^\s*$'
+# The GAO-bridge write takes ~1 min, but now and then it hangs at the first sector erase
+# ("Erasing sector at 0... 0%"; seen in 2 of 6 runs, with and without a design running). A
+# watchdog stops such an attempt after 60 s and retries; each attempt starts by erasing the
+# FPGA's SRAM.
+LOG=$(mktemp)
+trap 'rm -f "$LOG"' EXIT
+for attempt in 1 2 3; do
+  ./programmer_cli --device GW1NR-9C --run 24 --cable-index 4 --location "${LOC:-0}" > /dev/null 2>&1
+  ./programmer_cli --device GW1NR-9C --run 38 --mcuFile "$IMG/flash.bin" --spiaddr 0x000000 \
+      --cable-index 4 --location "${LOC:-0}" > "$LOG" 2>&1 &
+  PID=$!
+  stall=0
+  while kill -0 "$PID" 2>/dev/null; do
+    sleep 5
+    if tr '\r' '\n' < "$LOG" | grep -a '%' | tail -1 | grep -qE 'Erasing sector at 0\.\.\.: \[ *\] 0%'; then
+      stall=$((stall + 5))
+      if [[ $stall -ge 60 ]]; then
+        kill "$PID"
+        echo "attempt $attempt: GAO bridge stuck at the first sector erase, retrying"
+      fi
+    fi
+  done
+  wait "$PID" || true
+  if grep -q "Program flash finished" "$LOG"; then
+    tr '\r' '\n' < "$LOG" | grep -av '%' | grep -av '^\s*$'
+    exit 0
+  fi
+done
+tr '\r' '\n' < "$LOG" | grep -av '%' | grep -av '^\s*$' | tail -5
+echo "flash write failed after 3 attempts" >&2
+exit 1

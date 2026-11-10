@@ -7,6 +7,8 @@
 #   FLASH=1 sim/soc/run.sh                      # boot ROM copies Image+DTB from SPI flash
 #   BREAK_PC=8003ea70 sim/soc/run.sh            # stop there, dump last 20k fetches + CPU state
 #   UART_LOG=<file> sim/soc/run.sh              # console copy elsewhere than results/
+#   PC_PROF=1 sim/soc/run.sh                    # cycle profile per PC -> $WORK/soc_<tag>.pcprof
+#     PROF_FROM='text' PROF_TO='text'           # ... only between two console messages
 #   CONFIG=mmu sim/soc/run.sh                   # stage 2: S-mode CPU + MMU kernel (boot ROM 'B')
 #   ROM_INPUT=recs.bin sim/soc/run.sh           # boot ROM command records (see sim_main.cpp);
 #                                               # default: 'b' (preloaded RAM) or 'f' (FLASH=1)
@@ -56,5 +58,8 @@ args+=(+rom_input="$ROM_INPUT" +uart_log="${UART_LOG:-$HERE/results/soc_$TAG.uar
 [[ -n "${INPUT:-}" ]] && args+=(+input="$INPUT")
 [[ -n "${MAX_CYCLES:-}" ]] && args+=(+max_cycles="$MAX_CYCLES")
 [[ -n "${FETCH_TRACE:-}" ]] && args+=(+fetch_trace="$HERE/results/soc_$TAG.fetch")
+[[ -n "${PC_PROF:-}" ]] && args+=(+pc_prof="$WORK/soc_$TAG.pcprof")   # big: kept off the root disk
+[[ -n "${PROF_FROM:-}" ]] && args+=(+prof_from="$PROF_FROM")
+[[ -n "${PROF_TO:-}" ]] && args+=(+prof_to="$PROF_TO")
 [[ -n "${BREAK_PC:-}" ]] && args+=(+break_pc="$BREAK_PC" +break_dump="$HERE/results/soc_$TAG.break.txt")
 time "$OBJ/Vtb_soc" "${args[@]}" ${QUIET:+ +quiet}

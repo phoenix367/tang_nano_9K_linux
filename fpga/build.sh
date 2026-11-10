@@ -9,7 +9,7 @@
 # the first file of fpga/tang9k_soc.gprj. The PSRAM IP and rPLL under fpga/src/ are
 # described in fpga/src/tang9k_top.v and gowin_rpll.v.
 #
-# Env: CPU_HZ (default 36000000: the IP's clk_out at memory_clk 72 MHz), BAUD (default
+# Env: CPU_HZ (default 42000000: the IP's clk_out at memory_clk 84 MHz), BAUD (default
 #      1000000; the UART divider is CPU_HZ / BAUD, fixed in hardware), SMODE (default 0; 1 =
 #      the stage-2 CPU with S-mode + SV32 MMU, which also runs the stage-1 kernel), STAGE (syn|pnr|all),
 #      GOWIN_PATH (default /mnt/data/Gowin_V1.9.12.02_SP2_linux).
@@ -18,7 +18,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 B="$HERE/build"
-CPU_HZ="${CPU_HZ:-36000000}"
+CPU_HZ="${CPU_HZ:-42000000}"
 BAUD="${BAUD:-1000000}"
 SMODE="${SMODE:-0}"
 

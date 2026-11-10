@@ -32,6 +32,12 @@
 # Flash layout: 0x0000 header {magic "QRVL", image_len, dtb_len, flags}, 0x1000 DTB,
 # 0x2000 Image. flags bit 0: boot the kernel in S-mode (B) instead of M-mode (b).
 #
+# RNG seed: before entering the kernel (b, B, f) the boot ROM looks in the DTB for the
+# /chosen rng-seed property marked "QRNGSEED" (64 bytes) and folds into it the uninitialized
+# PSRAM page 0x807FE000 (noise after a cold power-up) and mtime. Linux hashes it and credits
+# it (add_bootloader_randomness), so its crng is ready at once; unseeded, every random number
+# drawn during boot ran a full entropy extraction (~1.3 s of the boot).
+#
 # SBI v0.1 shim (M-mode, for the S-mode kernel): mtvec = sbi_trap, stack at the top of the
 # reserved page SBI_STACK - 4 KB (the DT keeps Linux out of it). Delegated to S: misaligned
 # accesses, breakpoints, user ecalls, page faults, the S timer interrupt. Calls (a7 = EID,
@@ -319,6 +325,7 @@ cmd_flash:
 # ---------------------------------------------------------------- b: boot
 boot:
     jal   psram_ready
+    jal   seed_dtb
     la    a0, msg_boot
     jal   puts
     li    a0, 0
@@ -330,6 +337,7 @@ boot:
 cmd_boot_s:
     jal   psram_ready
 boot_s:
+    jal   seed_dtb
     la    a0, msg_boot_s
     jal   puts
     la    t0, sbi_trap
@@ -436,6 +444,42 @@ sbi_bad:                              # unexpected trap into M: report and stop
     la    a0, msg_crlf
     jal   puts
 1:  j     1b
+
+# seed_dtb: fill the DT rng-seed marked "QRNGSEED" (16 words) with the uninitialized PSRAM
+# page 0x807FE000 folded to 16 words, and mtime. Uses t0-t6 and a6.
+seed_dtb:
+    li    t0, DTB_ADDR
+    li    t1, DTB_ADDR + 4096 - 64
+    li    t2, 0x474E5251              # "QRNG"
+    li    t4, 0x44454553              # "SEED"
+1:  bgeu  t0, t1, 9f                  # no marked seed: nothing to do
+    lw    t3, 0(t0)
+    bne   t3, t2, 2f
+    lw    t3, 4(t0)
+    beq   t3, t4, 3f
+2:  addi  t0, t0, 4
+    j     1b
+3:  li    t1, 0x807FE000
+    li    t2, 0x807FF000
+    li    t5, 0
+4:  lw    t3, 0(t1)                   # seed[k] = rotl(seed[k], 7) ^ page word
+    add   t4, t0, t5
+    lw    t6, 0(t4)
+    slli  a6, t6, 7
+    srli  t6, t6, 25
+    or    t6, t6, a6
+    xor   t6, t6, t3
+    sw    t6, 0(t4)
+    addi  t5, t5, 4
+    andi  t5, t5, 63
+    addi  t1, t1, 4
+    bltu  t1, t2, 4b
+    li    t1, MTIME
+    lw    t3, 0(t1)
+    lw    t4, 0(t0)
+    xor   t4, t4, t3
+    sw    t4, 0(t0)
+9:  ret
 
 # copy(a0 = src, a1 = dst, a2 = bytes): word copy, '.' every 64 KB
 copy:

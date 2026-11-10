@@ -6,6 +6,9 @@
 //
 // Two Wishbone-classic style buses (cyc doubles as stb, one outstanding access each, the core
 // never drives both at once): instruction fetch and data. Merge them with servile_arbiter.
+// With SMODE=1 the MMU already merges them (fetches, data and page-table reads all go out on
+// the dbus port; the ibus port stays idle), so the arbiter's I/D select never depends on a
+// translation. o_dbg_fetch/o_dbg_pc report the physical fetches in both modes (trace, profile).
 `default_nettype none
 
 module qerv_cpu #(
@@ -31,7 +34,10 @@ module qerv_cpu #(
     output wire        o_dbus_we,
     output wire        o_dbus_cyc,
     input  wire [31:0] i_dbus_rdt,
-    input  wire        i_dbus_ack
+    input  wire        i_dbus_ack,
+    // debug: a fetch completes on the bus, and its physical address
+    output wire        o_dbg_fetch,
+    output wire [31:0] o_dbg_pc
 );
 
   // core side (virtual with SMODE)
@@ -47,7 +53,7 @@ module qerv_cpu #(
   // AMO unit input (physical)
   wire [31:0] pd_adr, pd_dat, pd_rdt;
   wire [ 3:0] pd_sel;
-  wire        pd_we, pd_cyc, pd_ack, pd_amo;
+  wire        pd_we, pd_cyc, pd_ack, pd_amo, pd_fetch;
   wire [ 4:0] pd_amo_op;
 
   wire [31:0] ext_rs1, ext_rs2, mdu_rd;
@@ -126,25 +132,29 @@ module qerv_cpu #(
           .o_dbus_ack     (dbus_ack),
           .o_dbus_fault   (dbus_fault),
           .o_dbus_fault_we(dbus_fault_we),
-          .o_mibus_adr    (o_ibus_adr),
-          .o_mibus_cyc    (o_ibus_cyc),
-          .i_mibus_rdt    (i_ibus_rdt),
-          .i_mibus_ack    (i_ibus_ack),
-          .o_mdbus_adr    (pd_adr),
-          .o_mdbus_dat    (pd_dat),
-          .o_mdbus_sel    (pd_sel),
-          .o_mdbus_we     (pd_we),
-          .o_mdbus_cyc    (pd_cyc),
-          .o_mdbus_amo    (pd_amo),
-          .o_mdbus_amo_op (pd_amo_op),
-          .i_mdbus_rdt    (pd_rdt),
-          .i_mdbus_ack    (pd_ack)
+          .o_mbus_adr     (pd_adr),
+          .o_mbus_dat     (pd_dat),
+          .o_mbus_sel     (pd_sel),
+          .o_mbus_we      (pd_we),
+          .o_mbus_cyc     (pd_cyc),
+          .o_mbus_amo     (pd_amo),
+          .o_mbus_amo_op  (pd_amo_op),
+          .o_mbus_fetch   (pd_fetch),
+          .i_mbus_rdt     (pd_rdt),
+          .i_mbus_ack     (pd_ack)
       );
+      assign o_ibus_adr  = 32'd0;
+      assign o_ibus_cyc  = 1'b0;
+      assign o_dbg_fetch = i_dbus_ack & pd_fetch;
+      assign o_dbg_pc    = o_dbus_adr;
     end else begin : gen_no_mmu
       assign o_ibus_adr = ibus_adr;
       assign o_ibus_cyc = ibus_cyc;
       assign ibus_rdt   = i_ibus_rdt;
       assign ibus_ack   = i_ibus_ack;
+      assign o_dbg_fetch = i_ibus_ack;
+      assign o_dbg_pc    = ibus_adr;
+      assign pd_fetch    = 1'b0;
       assign ibus_fault = 1'b0;
       assign {pd_adr, pd_dat, pd_sel, pd_we, pd_cyc, pd_amo, pd_amo_op} =
              {dbus_adr, dbus_dat, dbus_sel, dbus_we, dbus_cyc, dbus_amo, dbus_amo_op};

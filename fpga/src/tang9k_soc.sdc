@@ -1,11 +1,11 @@
 // Timing constraints for fpga/src/tang9k_top.v. Adapted from tang_nano_9K_ov7670's
 // camera_control.sdc (same PSRAM IP).
 //
-// memory_clk = 27 MHz * 8 / 3 = 72 MHz (rPLL); SoC clock = the IP's clk_out = 36 MHz.
+// memory_clk = 27 MHz * 28 / 9 = 84 MHz (rPLL); SoC clock = the IP's clk_out = 42 MHz.
 // If the rPLL is regenerated for another frequency, update -multiply_by/-divide_by here and
 // TANG9K_CPU_HZ in fpga/build.sh.
 create_clock -name clk27 -period 37.037 -waveform {0 18.518} [get_ports {clk_27m}]
-create_generated_clock -name memory_clk -source [get_ports {clk_27m}] -master_clock clk27 -multiply_by 8 -divide_by 3 [get_nets {memory_clk}]
+create_generated_clock -name memory_clk -source [get_ports {clk_27m}] -master_clock clk27 -multiply_by 28 -divide_by 9 [get_nets {memory_clk}]
 
 // clk_out comes from the IP's internal CLKDIV (instance "clkdiv" in the ov7670 build).
 // Without this the analyzer treats it as unconstrained.

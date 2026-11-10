@@ -25,7 +25,7 @@ BR2_TARGET_OPTIMIZATION="-fno-asynchronous-unwind-tables -fno-unwind-tables"
 BR2_PTHREADS_NONE=y
 
 # Reuse Buildroot's hash for the pinned kernel tarball
-BR2_GLOBAL_PATCH_DIR="board/qemu/patches"
+BR2_GLOBAL_PATCH_DIR="board/qemu/patches $(BR2_EXTERNAL_TANG9K_PATH)/patches"
 BR2_DOWNLOAD_FORCE_CHECK_HASHES=y
 
 # System: busybox init, no getty/login, no network

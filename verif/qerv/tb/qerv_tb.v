@@ -46,6 +46,8 @@ module qerv_tb;
   wire [31:0] ibus_adr, ibus_rdt, dbus_adr, dbus_dat, dbus_rdt;
   wire [ 3:0] dbus_sel;
   wire        ibus_cyc, ibus_ack, dbus_we, dbus_cyc, dbus_ack;
+  wire        fetch_ack;   // a physical fetch completes (SMODE: fetches use the dbus port)
+  wire [31:0] fetch_adr;
 
   qerv_cpu #(.W(W), .RESET_PC(RESET_PC), .SMODE(SMODE)) cpu (
       .i_clk      (clk),
@@ -62,7 +64,9 @@ module qerv_tb;
       .o_dbus_we  (dbus_we),
       .o_dbus_cyc (dbus_cyc),
       .i_dbus_rdt (dbus_rdt),
-      .i_dbus_ack (dbus_ack)
+      .i_dbus_ack (dbus_ack),
+      .o_dbg_fetch(fetch_ack),
+      .o_dbg_pc   (fetch_adr)
   );
 
   // mdu_top does not reset these; the FPGA powers them up at 0 (see perf/serv_cpi)
@@ -161,9 +165,9 @@ module qerv_tb;
 
   always @(negedge clk) begin
     if (!rst) begin
-      if (ibus_ack) begin
+      if (fetch_ack) begin
         n_fetch = n_fetch + 1;
-        if (f) $fwrite(f, "I %08h %0d\n", ibus_adr, cycle);
+        if (f) $fwrite(f, "I %08h %0d\n", fetch_adr, cycle);
       end
       if (mem_ack & mem_we) begin  // only the data side writes
         if (f) $fwrite(f, "S %08h %08h %1h %0d\n", mem_adr, mem_dat, mem_sel, cycle);
@@ -173,9 +177,9 @@ module qerv_tb;
         if (mem_adr == HALT_ADR) finish("HALT", mem_dat);
         if (mem_adr == tohost) finish("TOHOST", mem_dat);
       end
-      if (mem_ack & !mem_we & dbus_cyc & f) $fwrite(f, "R %08h %1h %0d\n", mem_adr, mem_sel, cycle);
+      if (mem_ack & !mem_we & dbus_cyc & !fetch_ack & f) $fwrite(f, "R %08h %1h %0d\n", mem_adr, mem_sel, cycle);
     end
-    if (cycle > TIMEOUT) finish("TIMEOUT", ibus_adr);
+    if (cycle > TIMEOUT) finish("TIMEOUT", fetch_adr);
   end
 
 endmodule

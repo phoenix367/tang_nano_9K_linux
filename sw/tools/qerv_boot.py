@@ -140,9 +140,13 @@ def main():
         rom.send(b"x")                                   # unknown command: "?" and a new prompt
         rom.read_until(rb"\?\r\n> $", 3)
 
-    rom.send(b"s")
-    out = rom.read_until(rb"status ((?:[0-9a-f]{8} ){7})\r\n> $", 3, echo=False)
-    words = [int(w, 16) for w in re.search(rb"status ((?:[0-9a-f]{8} ){7})", out).group(1).split()]
+    for _ in range(20):                   # PSRAM calibrates ~25 ms after a (re)configure
+        rom.send(b"s")
+        out = rom.read_until(rb"status ((?:[0-9a-f]{8} ){7})\r\n> $", 3, echo=False)
+        words = [int(w, 16) for w in re.search(rb"status ((?:[0-9a-f]{8} ){7})", out).group(1).split()]
+        if words[0] & 3 == 3:
+            break
+        time.sleep(0.05)
     names = ["calib", "cmd0", "cmd1", "rdv0", "rdv1", "miss", "wb"]
     print("[status " + " ".join(f"{n}={w:#x}" for n, w in zip(names, words)) + "]")
     if words[0] & 3 != 3 and (a.memtest or a.load or a.boot):

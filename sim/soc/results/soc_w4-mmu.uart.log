@@ -1,7 +1,7 @@
 
 QERV boot ROM
 > boot S
-[    0.000000] Linux version 6.18.7 (ivan@ivan-G5-5587) (riscv32-buildroot-linux-uclibc-gcc.br_real (Buildroot 2026.08.1) 15.3.0, GNU ld (GNU Binutils) 2.45.1) #4 Tue Nov 10 13:10:46 +04 2026
+[    0.000000] Linux version 6.18.7 (ivan@ivan-G5-5587) (riscv32-buildroot-linux-uclibc-gcc.br_real (Buildroot 2026.08.1) 15.3.0, GNU ld (GNU Binutils) 2.45.1) #2 Tue Nov 10 15:58:55 +04 2026
 [    0.000000] Machine model: Tang Nano 9K QERV (MMU)
 [    0.000000] SBI specification v0.1 detected
 [    0.000000] earlycon: uart8250 at MMIO 0x10000000 (options '1000000')
@@ -26,29 +26,28 @@ QERV boot ROM
 [    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
 [    0.000000] riscv-intc: 32 local interrupts mapped
 [    0.000000] clocksource: riscv_clocksource: mask: 0xffffffffffffffff max_cycles: 0x1d854df40, max_idle_ns: 3526361616960 ns
-[    0.000454] sched_clock: 64 bits at 1000kHz, resolution 1000ns, wraps every 2199023255500ns
-[    0.033612] Calibrating delay loop (skipped), value calculated using timer frequency.. 2.00 BogoMIPS (lpj=10000)
-[    0.055732] pid_max: default: 4096 minimum: 301
-[    0.093807] Mount-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
-[    0.114046] Mountpoint-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
-[    0.718777] ASID allocator disabled (0 bits)
-[    0.877583] Memory: 5084K/8192K available (1744K kernel code, 98K rwdata, 170K rodata, 659K init, 51K bss, 2860K reserved, 0K cma-reserved)
-[    1.051233] devtmpfs: initialized
-[    1.636927] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604462750000 ns
-[    1.666657] posixtimers hash table entries: 512 (order: 0, 2048 bytes, linear)
-[    1.691295] futex hash table entries: 16 (256 bytes on 1 NUMA nodes, total 0 KiB, linear).
-[    2.617947] clocksource: Switched to clocksource riscv_clocksource
-[    4.140570] workingset: timestamp_bits=30 max_order=11 bucket_order=0
-[   72.143344] Serial: 8250/16550 driver, 1 ports, IRQ sharing disabled
-[   72.562887] of_serial 10000000.serial: error -ENXIO: IRQ index 0 not found
-[   72.806175] printk: legacy console [ttyS0] disabled
-[   73.112388] 10000000.serial: ttyS0 at MMIO 0x10000000 (irq = 0, base_baud = 1000000) is a 16550A
-[   73.155896] printk: legacy console [ttyS0] enabled
-[   73.155896] printk: legacy console [ttyS0] enabled
-[   73.191293] printk: legacy bootconsole [uart8250] disabled
-[   73.191293] printk: legacy bootconsole [uart8250] disabled
-[   74.913403] clk: Disabling unused clocks
-[   75.606142] Freeing unused kernel image (initmem) memory: 656K
-[   75.625733] Kernel memory protection not selected by kernel config.
-[   75.646460] Run /init as init process
-~ # 
+[    0.000465] sched_clock: 64 bits at 1000kHz, resolution 1000ns, wraps every 2199023255500ns
+[    0.033950] Calibrating delay loop (skipped), value calculated using timer frequency.. 2.00 BogoMIPS (lpj=10000)
+[    0.057503] pid_max: default: 4096 minimum: 301
+[    0.093427] Mount-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.113326] Mountpoint-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.700319] ASID allocator disabled (0 bits)
+[    0.854649] Memory: 5084K/8192K available (1743K kernel code, 98K rwdata, 170K rodata, 660K init, 51K bss, 2860K reserved, 0K cma-reserved)
+[    1.028219] devtmpfs: initialized
+[    1.655900] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604462750000 ns
+[    1.688108] posixtimers hash table entries: 512 (order: 0, 2048 bytes, linear)
+[    1.713703] futex hash table entries: 16 (256 bytes on 1 NUMA nodes, total 0 KiB, linear).
+[    2.695126] clocksource: Switched to clocksource riscv_clocksource
+[    4.233157] workingset: timestamp_bits=30 max_order=11 bucket_order=0
+[    5.092639] Serial: 8250/16550 driver, 1 ports, IRQ sharing disabled
+[    5.862616] of_serial 10000000.serial: error -ENXIO: IRQ index 0 not found
+[    6.189247] printk: legacy console [ttyS0] disabled
+[    6.870120] 10000000.serial: ttyS0 at MMIO 0x10000000 (irq = 0, base_baud = 1000000) is a 16550A
+[    6.913330] printk: legacy console [ttyS0] enabled
+[    6.913330] printk: legacy console [ttyS0] enabled
+[    6.952281] printk: legacy bootconsole [uart8250] disabled
+[    6.952281] printk: legacy bootconsole [uart8250] disabled
+[   10.483040] clk: Disabling unused clocks
+[   24.022609] Freeing unused kernel image (initmem) memory: 660K
+[   24.043366] Kernel memory protection not selected by kernel config.
+[   24.069547] Run /init as init process

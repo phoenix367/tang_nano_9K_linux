@@ -10,6 +10,9 @@
 //                         sent back-to-back after each boot ROM "> " prompt
 //   +uart_log=<file>      console copy
 //   +fetch_trace=<file>   one little-endian u32 PC per instruction fetch
+//   +pc_prof=<file>       cycle profile: every cycle is charged to the instruction being
+//                         executed (the last fetched PC, physical); text lines "pc cycles fetches"
+//   +prof_from=<text> +prof_to=<text>   profile only between these two console texts
 //   +quiet                no console on stdout
 //   +break_pc=<hex>       stop at the first fetch of this PC and write the last 20000 fetches
 //                         with CPU state (MIE MPIE mode new_irq mtip) to +break_dump=<file>
@@ -17,7 +20,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "Vtb_soc.h"
@@ -26,12 +31,15 @@
 static const char *milestones[] = {"Linux version", "Freeing unused kernel", "Run /init",
                                    "Kernel panic", nullptr};
 
-// Value of +name=value, or nullptr. (commandArgsPlusMatch returns "" when absent.)
+// Value of +name=value ("" for a bare +name), or nullptr. commandArgsPlusMatch returns "" when
+// absent, and its result lives in a buffer that the next call reuses, so keep a copy.
 static const char *plusarg(const char *prefix) {
+  static std::deque<std::string> keep;
   const char *a = Verilated::commandArgsPlusMatch(prefix);
   if (!a || !*a) return nullptr;
   const char *eq = strchr(a, '=');
-  return eq ? eq + 1 : a + strlen(a);
+  keep.emplace_back(eq ? eq + 1 : "");
+  return keep.back().c_str();
 }
 
 int main(int argc, char **argv) {
@@ -71,6 +79,14 @@ int main(int argc, char **argv) {
   }
   if (const char *a = plusarg("fetch_trace=")) ftrace = fopen(a, "wb");
   bool quiet = plusarg("quiet") != nullptr;
+  const char *pc_prof = plusarg("pc_prof=");
+  struct Prof { uint64_t cycles, fetches; };
+  std::unordered_map<uint32_t, Prof> prof;
+  uint32_t prof_pc = 0;
+  uint64_t prof_cycle = 0;
+  const char *prof_from = plusarg("prof_from="), *prof_to = plusarg("prof_to=");
+  bool prof_on = prof_from == nullptr;
+  std::string prof_tail;
   uint32_t break_pc = 0;
   bool have_break = false;
   if (const char *a = plusarg("break_pc=")) { break_pc = strtoul(a, nullptr, 16); have_break = true; }
@@ -120,6 +136,13 @@ int main(int argc, char **argv) {
     if (top->fetch && !top->rst) {
       fetches++;
       if (ftrace) { uint32_t pc = top->pc; fwrite(&pc, 4, 1, ftrace); }
+      if (pc_prof && prof_on) {
+        Prof &p = prof[prof_pc];
+        p.cycles += cycle - prof_cycle;
+        prof_cycle = cycle;
+        prof_pc = top->pc;
+        prof[prof_pc].fetches++;
+      }
       if (have_break) {
         ring[ring_n % RING] = {cycle, (uint32_t)top->pc,
                                (uint8_t)(top->dbg_mie | top->dbg_mpie << 1 | top->dbg_mode_m << 2 |
@@ -143,6 +166,18 @@ int main(int argc, char **argv) {
     if (top->tx_push && !top->rst) {
       char ch = (char)top->tx_byte;
       if (!quiet) { fputc(ch, stdout); fflush(stdout); }
+      if (pc_prof && (prof_from || prof_to)) {
+        prof_tail += ch;
+        if (prof_tail.size() > 256) prof_tail.erase(0, 128);
+        if (!prof_on && prof_from && prof_tail.find(prof_from) != std::string::npos) {
+          prof_on = true;
+          prof_cycle = cycle;
+          prof_tail.clear();
+        } else if (prof_on && prof_to && prof_tail.find(prof_to) != std::string::npos) {
+          prof_on = false;
+          prof_to = nullptr;
+        }
+      }
       if (ulog) fputc(ch, ulog);
       if (prev_ch == '>' && ch == ' ' && rom_pos >= rom_buf.size() && rom_rec < rom_recs.size()) {
         rom_buf = rom_recs[rom_rec++];
@@ -215,6 +250,13 @@ int main(int argc, char **argv) {
   if (stop_cycle)
     fprintf(stderr, "   %-22s cycle %12llu  fetch %10llu  (%.3f s)\n", "shell prompt",
             (unsigned long long)stop_cycle, (unsigned long long)stop_fetch, stop_cycle / (double)clk_hz);
+  if (pc_prof) {
+    FILE *pf = fopen(pc_prof, "w");
+    for (auto &kv : prof)
+      fprintf(pf, "%08x %llu %llu\n", kv.first, (unsigned long long)kv.second.cycles,
+              (unsigned long long)kv.second.fetches);
+    fclose(pf);
+  }
   if (ulog) fclose(ulog);
   if (ftrace) fclose(ftrace);
   top->final();

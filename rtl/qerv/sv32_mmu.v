@@ -1,5 +1,7 @@
 // SV32 MMU for the stage-2 QERV CPU (doc/stage2_plan.md). Sits between the core's virtual
-// ibus/dbus and the physical buses (dbus then goes through amo_unit).
+// ibus/dbus and one physical bus that carries fetches, data accesses and page-table reads
+// (it then goes through amo_unit). Merging them here keeps the I/D select shallow: it is the
+// core's registered ibus_cyc and the walk state, never a translation result.
 //
 // Translation: when satp.MODE = 1 and the hart is in S or U (M is never translated; no MPRV).
 //
@@ -10,7 +12,7 @@
 // valid leaf with A = 1; permissions are checked on every lookup, so SUM, MXR and the
 // privilege can change without a flush.
 //
-// Page-table walk: up to two word reads on the physical dbus (through the L1 cache). Svade:
+// Page-table walk: up to two word reads on the physical bus (through the L1 cache). Svade:
 // the walker never writes a PTE. A = 0, or a store/AMO to a page with D = 0, is a page fault
 // and Linux sets the bits itself.
 //
@@ -21,11 +23,18 @@
 // sfence.vma (any operands) clears the whole TLB by sweeping it (2^TLB_L2 cycles); requests
 // wait meanwhile.
 //
-// Timing: untranslated accesses pass straight through. A translated access spends one
-// cycle in IDLE (TLB read) and one in LOOK (tag and permission check), then issues the
-// physical request from ACC with the registered PPN; a fetched PTE is registered and
-// checked in PCHK. Neither the TLB compare nor the PTE check is in a combinational path to
-// or from the bus (the SoC's address decode and read-data mux make that path long). After an ack
+// Micro-TLB: each bus also keeps the last page it translated (VPN, PPN, flags {D,U,X,W,R}),
+// filled on every TLB hit in LOOK and cleared with the TLB (sfence.vma, reset).
+//
+// Timing: untranslated accesses pass straight through. A translated request whose page
+// matches its bus's micro-TLB entry, with the cached flags allowing it under the current
+// privilege/SUM/MXR, is issued straight from IDLE; code and data mostly stay within a page.
+// Otherwise it spends one cycle in IDLE (TLB read) and one in LOOK (tag and permission
+// check), refills the micro-TLB, and issues from ACC. A fetched PTE is registered and checked
+// in PCHK. The physical address is always the micro-TLB PPN (registered) plus the offset;
+// the micro-TLB VPN compare only gates the request strobe. The TLB compare and the PTE check
+// are not in combinational paths to or from the bus (the SoC's address decode and read-data
+// mux make that path long). After an ack
 // the MMU waits (DONE) for the core to drop the request: after a faulting dbus ack SERV
 // keeps dbus_cyc up for two more cycles (its trap stage first reads the RF), and that must
 // not start a new lookup.
@@ -61,21 +70,17 @@ module sv32_mmu #(
     output wire        o_dbus_ack,
     output wire        o_dbus_fault,
     output wire        o_dbus_fault_we,
-    // physical instruction bus
-    output wire [31:0] o_mibus_adr,
-    output wire        o_mibus_cyc,
-    input  wire [31:0] i_mibus_rdt,
-    input  wire        i_mibus_ack,
-    // physical data bus (also carries the page-table reads)
-    output wire [31:0] o_mdbus_adr,
-    output wire [31:0] o_mdbus_dat,
-    output wire [ 3:0] o_mdbus_sel,
-    output wire        o_mdbus_we,
-    output wire        o_mdbus_cyc,
-    output wire        o_mdbus_amo,
-    output wire [ 4:0] o_mdbus_amo_op,
-    input  wire [31:0] i_mdbus_rdt,
-    input  wire        i_mdbus_ack
+    // physical bus: fetches, data accesses and page-table reads
+    output wire [31:0] o_mbus_adr,
+    output wire [31:0] o_mbus_dat,
+    output wire [ 3:0] o_mbus_sel,
+    output wire        o_mbus_we,
+    output wire        o_mbus_cyc,
+    output wire        o_mbus_amo,
+    output wire [ 4:0] o_mbus_amo_op,
+    output wire        o_mbus_fetch,         // the access on the bus is a fetch (debug)
+    input  wire [31:0] i_mbus_rdt,
+    input  wire        i_mbus_ack
 );
 
   localparam N  = 1 << TLB_L2;
@@ -91,19 +96,23 @@ module sv32_mmu #(
   reg  [31:0] p;                           // PTE being checked (PCHK)
   reg        lvl;                          // walk level: 1 (root) or 0
   reg  [19:0] next_ppn;                    // level-0 table (from the level-1 PTE)
-  reg  [19:0] ppn_r;                       // physical page of the access in progress
   reg        sfence_pend;
   reg        req_d;                        // the translated request is on the dbus
+  // micro-TLB: last translated page per bus; flags {D, U, X, W, R}
+  reg        u_iv, u_dv;
+  reg [19:0] u_ivpn, u_dvpn, u_ippn, u_dppn;
+  reg [ 4:0] u_if, u_df;
   reg  [TLB_L2-1:0] scnt;
   reg  [EW-1:0] fill;
 
   // ---------------------------------------------------------------- request
-  wire        is_d  = i_dbus_cyc;          // the core never drives both buses
+  // the core never drives both buses; ibus_cyc is a register in the core, dbus_cyc a decode
+  wire        is_d  = !i_ibus_cyc;
   wire        req   = i_ibus_cyc | i_dbus_cyc;
   wire        xlate = i_satp_mode & !i_priv[1];
-  // TLB read address in IDLE (from the live request); once accepted, everything else uses
-  // the latched bus (req_d), which keeps the core's dbus_cyc decode out of those paths
-  wire [31:0] va_i  = is_d ? i_dbus_adr : i_ibus_adr;
+  // the live request: TLB read address in IDLE and the physical bus address; once accepted,
+  // the state machine uses the latched bus (req_d)
+  wire [31:0] va_i  = i_ibus_cyc ? i_ibus_adr : i_dbus_adr;
   wire [31:0] va    = req_d ? i_dbus_adr : i_ibus_adr;
   wire        is_lr = i_dbus_amo & (i_dbus_amo_op == 5'b00010);
   wire        is_st = req_d & i_dbus_we & !is_lr;
@@ -132,6 +141,15 @@ module sv32_mmu #(
   wire rwx_ok = !req_d ? e_x : is_st ? (e_w & e_d) : (e_r | (i_mxr & e_x));
   wire perm_ok = u_ok & rwx_ok;
 
+  // micro-TLB fast path (per bus, from the live request; permissions from the cached flags)
+  wire st_now  = i_dbus_we & !is_lr;
+  wire u_iperm = u_if[2] & (!i_priv[0] ? u_if[3] : !u_if[3]);
+  wire u_dperm = (!i_priv[0] ? u_df[3] : (!u_df[3] | i_sum)) &
+                 (st_now ? (u_df[1] & u_df[4]) : (u_df[0] | (i_mxr & u_df[2])));
+  wire fast_ok = (st == S_IDLE) & xlate & !sfence_pend;
+  wire fast_i  = fast_ok & i_ibus_cyc & u_iv & (i_ibus_adr[31:12] == u_ivpn) & u_iperm;
+  wire fast_d  = fast_ok & i_dbus_cyc & u_dv & (i_dbus_adr[31:12] == u_dvpn) & u_dperm;
+
   // ---------------------------------------------------------------- walk
   wire        p_bad  = !p[0] | (!p[1] & p[2]);           // !V, or W without R
   wire        p_leaf = p[1] | p[3];                       // R or X
@@ -146,6 +164,9 @@ module sv32_mmu #(
         if (sfence_pend) begin
           st <= S_SWEEP;
           scnt <= {TLB_L2{1'b0}};
+        end else if (fast_i | fast_d) begin
+          req_d <= fast_d;
+          st <= i_mbus_ack ? S_DONE : S_ACC;
         end else if (req & xlate) begin
           st <= S_LOOK;
           req_d <= is_d;
@@ -153,21 +174,25 @@ module sv32_mmu #(
       S_LOOK:
         if (!req) st <= S_IDLE;
         else if (hit) begin
-          ppn_r <= e_ppn;
-          st <= perm_ok ? S_ACC : S_FAULT;
+          st <= perm_ok ? S_ACC : S_FAULT;   // ACC uses the micro-TLB entry filled here
+          if (req_d) begin
+            {u_dv, u_dvpn, u_dppn, u_df} <= {1'b1, va[31:12], e_ppn, e_d, e_u, e_x, e_w, e_r};
+          end else begin
+            {u_iv, u_ivpn, u_ippn, u_if} <= {1'b1, va[31:12], e_ppn, e_d, e_u, e_x, e_w, e_r};
+          end
         end else begin
           lvl <= 1'b1;
           st <= S_WALK;
         end
       S_ACC:
-        if (req_d ? i_mdbus_ack : i_mibus_ack) st <= S_DONE;
+        if (i_mbus_ack) st <= S_DONE;
       S_FAULT:
         st <= S_DONE;
       S_DONE:
         if (!req) st <= S_IDLE;
       S_WALK:
-        if (i_mdbus_ack) begin
-          p <= i_mdbus_rdt;
+        if (i_mbus_ack) begin
+          p <= i_mbus_rdt;
           st <= S_PCHK;
         end
       S_PCHK:
@@ -191,7 +216,9 @@ module sv32_mmu #(
       end
       default: st <= S_IDLE;
     endcase
+    if (i_sfence | sfence_pend) {u_iv, u_dv} <= 2'b00;
     if (i_rst) begin
+      {u_iv, u_dv} <= 2'b00;
       st <= S_SWEEP;                       // start with an empty TLB
       scnt <= {TLB_L2{1'b0}};
       sfence_pend <= 1'b0;
@@ -200,28 +227,30 @@ module sv32_mmu #(
     end
   end
 
-  // ---------------------------------------------------------------- physical buses
+  // ---------------------------------------------------------------- physical bus
   wire        pass = (st == S_IDLE) & !xlate & !sfence_pend;   // untranslated
   wire        acc  = st == S_ACC;
+  wire        core = !walk;                                    // the core's request is on the bus
+  // in ACC the micro-TLB entry of the active bus holds the page (filled in LOOK or matched)
+  wire [19:0] u_ppn = i_ibus_cyc ? u_ippn : u_dppn;
 
-  assign o_mibus_cyc = (i_ibus_cyc & pass) | (acc & !req_d);
-  assign o_mibus_adr = acc ? {ppn_r, i_ibus_adr[11:0]} : i_ibus_adr;
-
-  assign o_mdbus_cyc    = walk | (i_dbus_cyc & pass) | (acc & req_d);
-  assign o_mdbus_adr    = walk ? pte_adr : acc ? {ppn_r, i_dbus_adr[11:0]} : i_dbus_adr;
-  assign o_mdbus_dat    = i_dbus_dat;
-  assign o_mdbus_sel    = walk ? 4'hF : i_dbus_sel;
-  assign o_mdbus_we     = !walk & i_dbus_we;
-  assign o_mdbus_amo    = !walk & i_dbus_amo;
-  assign o_mdbus_amo_op = i_dbus_amo_op;
+  // the address uses registered state and the core's registered address only
+  assign o_mbus_cyc    = walk | (req & pass) | fast_i | fast_d | acc;
+  assign o_mbus_adr    = walk ? pte_adr : {xlate ? u_ppn : va_i[31:12], va_i[11:0]};
+  assign o_mbus_dat    = i_dbus_dat;
+  assign o_mbus_sel    = walk ? 4'hF : i_dbus_sel;
+  assign o_mbus_we     = core & !i_ibus_cyc & i_dbus_we;   // dbus_we/amo are stale on fetches
+  assign o_mbus_amo    = core & !i_ibus_cyc & i_dbus_amo;
+  assign o_mbus_amo_op = i_dbus_amo_op;
+  assign o_mbus_fetch  = core & i_ibus_cyc;
 
   // ---------------------------------------------------------------- core buses
   wire fault = st == S_FAULT;
-  assign o_ibus_rdt      = i_mibus_rdt;
-  assign o_ibus_ack      = (i_mibus_ack & i_ibus_cyc) | (fault & !req_d);
+  assign o_ibus_rdt      = i_mbus_rdt;
+  assign o_ibus_ack      = (i_mbus_ack & core & i_ibus_cyc) | (fault & !req_d);
   assign o_ibus_fault    = fault & !req_d;
-  assign o_dbus_rdt      = i_mdbus_rdt;
-  assign o_dbus_ack      = (i_mdbus_ack & !walk & i_dbus_cyc) | (fault & req_d);
+  assign o_dbus_rdt      = i_mbus_rdt;
+  assign o_dbus_ack      = (i_mbus_ack & core & i_dbus_cyc) | (fault & req_d);
   assign o_dbus_fault    = fault & req_d;
   assign o_dbus_fault_we = is_st;
 

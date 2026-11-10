@@ -24,7 +24,7 @@ WIDTHS="${WIDTHS:-4 1}"
 SUITES="${SUITES:-rv32ui rv32um rv32ua}"
 SMODE="${SMODE:-0}"
 ENV="${ENV:-p}"
-SKIP="${SKIP:-ma_data$([[ $SMODE == 1 ]] && echo ' dirty')}"
+SKIP="${SKIP:-ma_data$([[ $SMODE == 1 ]] && echo ' dirty' || true)}"  # || true: set -e
 MEMSIZE=65536
 [[ "$ENV" == v ]] && MEMSIZE=524288  # env/v pages its 63 user pages in above the program
 

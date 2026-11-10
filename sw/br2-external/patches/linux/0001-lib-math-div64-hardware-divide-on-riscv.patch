@@ -1,0 +1,77 @@
+From: Claude (tang_nano_9k_linux)
+Subject: [PATCH] lib/math/div64: use hardware 32-bit divides for __div64_32 on RISC-V
+
+RV32 Linux always has the M extension. The generic __div64_32() is a
+shift-and-subtract loop of 64-bit operations; with two 32-bit divu (Knuth D
+on 16-bit digits) it is a few dozen instructions. On the bit-serial QERV core
+the loop was 3.3% of all boot cycles (timekeeping and scheduler do_div()).
+
+---
+--- a/lib/math/div64.c	2026-11-10 15:56:56.481022805 +0400
++++ b/lib/math/div64.c	2026-11-10 15:56:56.497423129 +0400
+@@ -29,6 +29,57 @@
+ #if BITS_PER_LONG == 32
+ 
+ #ifndef __div64_32
++#ifdef CONFIG_RISCV
++/*
++ * RV32 Linux always has the M extension, so divide with two 32-bit hardware
++ * divides (Knuth's algorithm D on 16-bit digits, as in Hacker's Delight
++ * "divlu") instead of the shift-and-subtract loop below: on a slow in-order
++ * core that loop costs hundreds of instructions per call (timekeeping and the
++ * scheduler do_div() on every tick).
++ */
++uint32_t __attribute__((weak)) __div64_32(uint64_t *n, uint32_t base)
++{
++	uint32_t hi = (uint32_t)(*n >> 32), lo = (uint32_t)*n;
++	uint32_t qhi = 0, vn1, vn0, un32, un21, un10, un1, un0, q1, q0, rhat, rem;
++	int s;
++
++	if (hi >= base) {	/* afterwards hi < base: the low quotient fits 32 bits */
++		qhi = hi / base;
++		hi -= qhi * base;
++	}
++	s = __builtin_clz(base);	/* normalize: divisor MSB set */
++	base <<= s;
++	vn1 = base >> 16;
++	vn0 = base & 0xffff;
++	un32 = s ? (hi << s) | (lo >> (32 - s)) : hi;
++	un10 = lo << s;
++	un1 = un10 >> 16;
++	un0 = un10 & 0xffff;
++
++	q1 = un32 / vn1;		/* first 16-bit quotient digit */
++	rhat = un32 - q1 * vn1;
++	while (q1 >= 0x10000 || q1 * vn0 > ((rhat << 16) | un1)) {
++		q1--;
++		rhat += vn1;
++		if (rhat >= 0x10000)
++			break;
++	}
++	un21 = (un32 << 16) + un1 - q1 * base;
++
++	q0 = un21 / vn1;		/* second 16-bit quotient digit */
++	rhat = un21 - q0 * vn1;
++	while (q0 >= 0x10000 || q0 * vn0 > ((rhat << 16) | un0)) {
++		q0--;
++		rhat += vn1;
++		if (rhat >= 0x10000)
++			break;
++	}
++	rem = ((un21 << 16) + un0 - q0 * base) >> s;
++
++	*n = ((uint64_t)qhi << 32) | (q1 << 16) | q0;
++	return rem;
++}
++#else
+ uint32_t __attribute__((weak)) __div64_32(uint64_t *n, uint32_t base)
+ {
+ 	uint64_t rem = *n;
+@@ -61,6 +112,7 @@
+ 	*n = res;
+ 	return rem;
+ }
++#endif /* CONFIG_RISCV */
+ EXPORT_SYMBOL(__div64_32);
+ #endif
+ 

@@ -1,11 +1,12 @@
 // rPLL for the QERV SoC: 27 MHz crystal -> memory_clk for the PSRAM IP.
 // Written by hand from the IDE's generated rPLL (tang_nano_9K_ov7670 src/gowin_rpll), with
 // static dividers:
-//   CLKOUT = FCLKIN * (FBDIV_SEL + 1) / (IDIV_SEL + 1) = 27 * 8 / 3 = 72 MHz
-//   PFD    = 27 / 3 = 9 MHz
-//   VCO    = CLKOUT * ODIV_SEL = 72 * 8 = 576 MHz (400-1200 MHz)
-// 72 MHz, not 78: with this PSRAM IP netlist, channel 1 never calibrates between ~77.6 and
-// ~81 MHz on the board (fpga/probe sweep, doc/stage1_plan.md M3); 72 is ~5 MHz clear of it.
+//   CLKOUT = FCLKIN * (FBDIV_SEL + 1) / (IDIV_SEL + 1) = 27 * 28 / 9 = 84 MHz
+//   PFD    = 27 / 9 = 3 MHz
+//   VCO    = CLKOUT * ODIV_SEL = 84 * 8 = 672 MHz (400-1200 MHz)
+// With this PSRAM IP netlist, channel 1 never calibrates between ~77.6 and ~81 MHz on the
+// board (fpga/probe sweep, doc/stage1_plan.md M3). 84 MHz (CPU 42 MHz) calibrates; the
+// previous setting was 72 MHz (CPU 36 MHz).
 // If this changes, also change the PSRAM IP's memory clock, the -multiply_by/-divide_by in
 // tang9k_soc.sdc and CPU_HZ in fpga/build.sh (= memory_clk / 2).
 module Gowin_rPLL (clkout, lock, clkin);
@@ -41,9 +42,9 @@ rPLL rpll_inst (
 
 defparam rpll_inst.FCLKIN = "27";
 defparam rpll_inst.DYN_IDIV_SEL = "false";
-defparam rpll_inst.IDIV_SEL = 2;
+defparam rpll_inst.IDIV_SEL = 8;
 defparam rpll_inst.DYN_FBDIV_SEL = "false";
-defparam rpll_inst.FBDIV_SEL = 7;
+defparam rpll_inst.FBDIV_SEL = 27;
 defparam rpll_inst.DYN_ODIV_SEL = "false";
 defparam rpll_inst.ODIV_SEL = 8;
 defparam rpll_inst.PSDA_SEL = "0000";

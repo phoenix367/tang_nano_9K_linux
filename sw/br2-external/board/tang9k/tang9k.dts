@@ -13,6 +13,12 @@
 	chosen {
 		bootargs = "earlycon=uart8250,mmio,0x10000000,1000000 console=ttyS0";
 		stdout-path = &uart0;
+		/* "QRNGSEED" marker + 56 bytes: the boot ROM fills it with what entropy the board
+		   has (sw/bootrom/bootrom.S seed_dtb); Linux credits it and its crng is ready at once. */
+		rng-seed = [51 52 4e 47 53 45 45 44 00 00 00 00 00 00 00 00
+			    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+			    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+			    00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00];
 	};
 
 	memory@80000000 {

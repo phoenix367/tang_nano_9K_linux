@@ -77,7 +77,7 @@ module tang9k_top (
   // tang_nano_9K_ov7670 (Gowin V1.9.9 Beta-4, MEMORY_CLK=135, module name Video_frame_buffer):
   // the netlist rtl/sim/psram_ui_model.v was matched to (verif/psram), which also passed at
   // memory_clk 54 and 100 MHz. On the board it calibrates both channels from 54 to 135 MHz
-  // except ~77.6-81 MHz (fpga/probe), hence memory_clk 72 MHz.
+  // except ~77.6-81 MHz (fpga/probe); memory_clk is 84 MHz (CPU 42 MHz).
   Video_frame_buffer psram (
       .clk            (clk_27m),
       .rst_n          (sys_rst_n),

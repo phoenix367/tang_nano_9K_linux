@@ -362,6 +362,154 @@ _start:
     lw    a0, 0(t0)
     CHECK(a0, 0x11111117)
 
+# ---------------------------------------------------------------- 11: micro-TLB, same page
+# Each case makes an access that fills the micro-TLB entry for a page, then a second access to
+# the same page that its cached flags must refuse under a different SUM / MXR / privilege /
+# access type (sv32_mmu.v rechecks them on every fast-path access).
+    TEST(11)
+    SUM_ON
+    RESUME(3f)
+    TO_S(1f)
+1:  li    t0, VA(0)
+    lw    a0, 0(t0)               # U page from S with SUM: fine
+    li    t1, 0x40000
+    csrc  sstatus, t1             # SUM off
+4:  lw    a0, 0(t0)               # 13
+    j     fail
+3:  LOADM
+    CHECK(a0, 13)
+    la    t0, 4b
+    bne   a1, t0, fail
+    CHECK(a2, 0x40000000)
+    SUM_ON
+    li    t0, 0x80000
+    csrs  mstatus, t0             # MXR
+    RESUME(3f)
+    TO_S(1f)
+1:  li    t0, VA(2)
+    lw    a0, 0(t0)               # X-only page with MXR: fine
+    li    t1, 0x80000
+    csrc  sstatus, t1             # MXR off
+4:  lw    a0, 0(t0)               # 13
+    j     fail
+3:  LOADM
+    CHECK(a0, 13)
+    la    t0, 4b
+    bne   a1, t0, fail
+    CHECK(a2, 0x40002000)
+    RESUME(3f)
+    TO_S(1f)
+1:  li    t0, VA(5)
+    lw    a0, 0(t0)               # D = 0: loads are fine
+4:  sw    a0, 4(t0)               # store: 15
+    j     fail
+3:  LOADM
+    CHECK(a0, 15)
+    la    t0, 4b
+    bne   a1, t0, fail
+    CHECK(a2, 0x40005004)
+    RESUME(3f)
+    TO_S(1f)
+1:  li    t0, VA(1)
+    lw    a0, 0(t0)               # read-only page
+4:  amoadd.w a0, a0, (t0)         # AMO = store: 15
+    j     fail
+3:  LOADM
+    CHECK(a0, 15)
+    la    t0, 4b
+    bne   a1, t0, fail
+    CHECK(a2, 0x40001000)
+    SUM_OFF
+    UVA(t0, user_page)
+    csrw  mepc, t0
+    li    t0, 0x1800
+    csrc  mstatus, t0
+    RESUME(3f)
+    mret                          # U: load and store VA(0), ecall
+3:  LOADM
+    CHECK(a0, 8)
+    RESUME(3f)
+    TO_S(1f)
+1:  li    t0, VA(0)
+4:  lw    a0, 0(t0)               # same page from S without SUM: 13
+    j     fail
+3:  LOADM
+    CHECK(a0, 13)
+    la    t0, 4b
+    bne   a1, t0, fail
+    RESUME(3f)
+    TO_S(1f)
+1:  li    t0, VA(7)
+    lw    a0, 0(t0)               # S-only page from S: fine
+    ecall
+3:  LOADM
+    CHECK(a0, 9)
+    UVA(t0, user_s_load)
+    csrw  mepc, t0
+    li    t0, 0x1800
+    csrc  mstatus, t0
+    RESUME(3f)
+    mret                          # same page from U: 13
+3:  LOADM
+    CHECK(a0, 13)
+    CHECK(a2, 0x40007000)
+    UVA(t0, user_ecall)
+    csrw  mepc, t0
+    li    t0, 0x1800
+    csrc  mstatus, t0
+    RESUME(3f)
+    mret                          # U runs its page
+3:  LOADM
+    CHECK(a0, 8)
+    li    t0, 0x1800
+    csrc  mstatus, t0
+    li    t0, 0x0800
+    csrs  mstatus, t0
+    UVA(t0, user_ecall)
+    csrw  mepc, t0
+    RESUME(3f)
+    mret                          # S fetch from the same U page: 12
+3:  LOADM
+    CHECK(a0, 12)
+    UVA(t0, user_ecall)
+    bne   a1, t0, fail
+    bne   a2, t0, fail
+    RESUME(3f)
+    TO_S(1f)
+1:  ecall                         # S runs this page
+3:  LOADM
+    CHECK(a0, 9)
+    RESUME(3f)
+    TO_U(1f)
+1:  nop                           # U fetch from the same S page: 12
+    j     fail
+3:  LOADM
+    CHECK(a0, 12)
+    la    t0, 1b
+    bne   a1, t0, fail
+    # sfence.vma must also clear the micro-TLB: M remaps the page (untranslated, so the entry
+    # filled by S stays), then S fences and loads the same page with no access in between
+    SUM_ON
+    SET_PT0(8, PTE(PA_A, V | R | W | U | A | D))
+    sfence.vma
+    RESUME(3f)
+    TO_S(1f)
+1:  li    t0, VA(8)
+    lw    a0, 0(t0)               # PA_A, fills the micro-TLB
+    ecall
+3:  SET_PT0(8, PTE(PA_B, V | R | W | U | A | D))
+    RESUME(3f)
+    TO_S(1f)
+1:  li    t0, VA(8)
+    sfence.vma
+    lw    a0, 0(t0)               # PA_B
+    li    t1, 0x22222222
+    bne   a0, t1, 9f
+    ecall
+9:  j     fail
+3:  LOADM
+    CHECK(a0, 9)
+
 # ---------------------------------------------------------------- 10: page faults delegated to S
     TEST(10)
     li    t0, (1 << 12) | (1 << 13) | (1 << 15)

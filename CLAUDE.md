@@ -7,9 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Experimental, greenfield: bring up a Linux kernel on a **Tang Nano 9K** by putting a RISC-V
 soft core into the FPGA with the on-package PSRAM as main memory. The core is QERV (SERV
 W=4) extended for no-MMU M-mode Linux. M0–M3 are done, and in M4 Linux boots to a shell on
-the board (UART-loaded, `~ #` in 43 s at 36 MHz). Stage 2 (SV32 MMU, S-mode kernel under a
-ROM SBI shim) also boots to a shell on the board (`~ #` in 55 s, real fork/pipelines);
-`doc/stage2_plan.md` has the plan and status. The stage-1 milestones (M0 software image in the emulator →
+the board. Stage 2 (SV32 MMU, S-mode kernel under a ROM SBI shim) also boots to a shell on
+the board, with real fork and pipelines; `doc/stage2_plan.md` has the plan and status. The
+board autoboots the MMU kernel from its flashes: `~ #` 17 s after the boot ROM prompt at
+42 MHz (12 s after a UART-loaded `B`). The stage-1 milestones (M0 software image in the emulator →
 M1 core → M2 SoC sim → M3 fit → M4 board), memory map and open decisions are in
 `doc/stage1_plan.md`. Update this file as decisions land. Don't describe planned structure as
 if it exists.
@@ -24,8 +25,9 @@ if it exists.
   `tang9k_cfg.v` with `TANG9K_CPU_HZ` and the hex path; `fpga/build.sh prep` does only this)
   and builds `fpga/tang9k_soc.gprj`, top `fpga/src/tang9k_top.v`. The bitstream is
   `fpga/impl/pnr/tang9k_soc.fs`.
-  - **Clocks:** the rPLL makes memory_clk = 72 MHz; the SoC runs on the IP's clk_out
-    (36 MHz). The rPLL wrapper `fpga/src/gowin_rpll/gowin_rpll.v` is written by hand (the
+  - **Clocks:** the rPLL makes memory_clk = 84 MHz; the SoC runs on the IP's clk_out
+    (42 MHz; it was 72/36 MHz). The stage-2 build meets 42 MHz with almost no slack (Fmax
+    42.004 MHz at the worst-case corner; the worst paths are the reset fan-out). The rPLL wrapper `fpga/src/gowin_rpll/gowin_rpll.v` is written by hand (the
     user's call: no regeneration needed). If its frequency changes, change the SDC's
     multiply/divide and `CPU_HZ` too.
   - **Avoid memory_clk ~77.6–81 MHz:** with this IP netlist, PSRAM channel 1 (and at 81 MHz
@@ -47,8 +49,8 @@ if it exists.
   - **Flash pins (59–62) are MSPI dual-purpose pins:** the build passes
     `GW_OPTIONS="-use_mspi_as_gpio 1 -use_sspi_as_gpio 1"`. A build from the IDE needs the
     same in Project → Configuration → Dual-Purpose Pin.
-  - **Results:** see `doc/stage1_plan.md` M3/M4 (50% logic, Fmax 43.1 MHz vs 36, 11
-    IP-internal hold violations of the known ov7670 class).
+  - **Results:** see `doc/stage1_plan.md` M3/M4 and `doc/stage2_plan.md` (stage 2: 57% logic,
+    Fmax 42.004 MHz vs 42, and IP-internal hold violations of the known ov7670 class).
 - **Boot ROM monitor + host tool (M4):** `sw/bootrom/bootrom.S` prints a banner and a `> `
   prompt and takes single-byte commands with binary LE arguments: `l` load (replies a djb2
   hash), `c` hash memory, `m` memtest, `s` status, `b` boot RAM, `f` boot from flash
@@ -81,9 +83,10 @@ if it exists.
   - **Internal flash (persistent bitstream):** `openFPGALoader -b tangnano9k -f <fs>`, ~12 s
     with a CRC check. `qerv_boot.py --reconfig` reloads it (openFPGALoader -r), as at
     power-on.
-  - **What the board holds now:** the stage-2 bitstream (SMODE=1, reset on pin 3) in the
-    internal flash, and the MMU Linux image (S-mode flag) in the SPI flash. At power-up it
-    autoboots Linux: `~ #` about 61 s after the boot ROM prompt.
+  - **What the board holds now:** the 42 MHz stage-2 bitstream with the micro-TLB (SMODE=1,
+    reset on pin 3; a copy is `/mnt/data/build/tang9k_linux/tang9k_soc_smode1_42mhz_utlb.fs`)
+    in the internal flash, and the MMU Linux image (S-mode flag) in the SPI flash. At
+    power-up it autoboots Linux: `~ #` about 17 s after the boot ROM prompt.
   - **Checking the flash:** `qerv_boot.py --hash-flash flash.bin` has the boot ROM hash the
     flash window (2.7 MB in ~18 s). `--flash-boot` boots it, and `--autoboot` loads the
     bitstream and sends nothing (the power-up path).
@@ -152,7 +155,7 @@ if it exists.
     - Its `clk` input must be the free-running 27 MHz reference, and `pll_lock` must be high.
     - init_calib rises ~15.6 ms after reset.
     - memory_clk = 2 × clk_out is fixed; the GUI accepts 50–250 MHz.
-    - memory_clk is 72 MHz (CPU 36 MHz). The earlier reasoning that the IP's fixed ~3.2 ns
+    - memory_clk is 84 MHz (CPU 42 MHz). The earlier reasoning that the IP's fixed ~3.2 ns
       CK shift favours ~78 MHz was wrong on hardware: 78 MHz sits in the calibration band.
     - Headless gw_sh can't generate this IP. In the 1.9.12 IDE it is under "Deprecated"
       ("PSRAM Memory Interface HS 2CH"). The non-deprecated "PSRAM Memory Interface HS" has
@@ -179,10 +182,30 @@ if it exists.
     - `commandArgsPlusMatch` returns "" (not NULL) when a plusarg is absent.
 - **Stage 2 (doc/stage2_plan.md):**
   - **CPU:** `qerv_cpu` `SMODE=1` = SERV `LINUX=1 SMODE=1` (U/S/M, delegation, sret, S CSRs,
-    satp, time/timeh from the CLINT's mtime) + `rtl/qerv/sv32_mmu.v` (TLB in BSRAM, read-only
-    walker, Svade). `SMODE=0` is the stage-1 core, unchanged (CPI and tests identical).
+    satp, time/timeh from the CLINT's mtime) + `rtl/qerv/sv32_mmu.v` (TLB in BSRAM, a
+    one-page micro-TLB per bus that skips the TLB's 2 cycles, read-only walker, Svade).
+    `SMODE=0` is the stage-1 core, unchanged (CPI and tests identical).
+  - **One physical bus with SMODE=1:** the MMU merges fetches, data and PTE reads onto the
+    dbus port (through the AMO unit), and the ibus port stays idle. Physical fetches for
+    traces and profiles come from `qerv_cpu`'s `o_dbg_fetch`/`o_dbg_pc` in both modes.
   - **Software:** `CONFIG=mmu sw/build.sh` → `images-tang9k-mmu/`. Keep `CONFIG_EFI` off: it
     forces the C extension on.
+  - **Boot-time findings (both kernels):**
+    - `CONFIG_LEGACY_PTYS` must stay off: `pty_init` registering 256 BSD pty pairs took 44
+      of 55 s.
+    - `sw/br2-external/patches/linux/` holds a kernel patch (in `BR2_GLOBAL_PATCH_DIR`)
+      making `__div64_32` use 32-bit `divu`. Patches apply on extract, so use
+      `sw/build.sh linux-dirclean` after adding one.
+    - The DT `/chosen/rng-seed`, marked "QRNGSEED", is filled by the boot ROM (`seed_dtb`:
+      uninitialized PSRAM page + mtime). An unseeded crng runs a full entropy extraction
+      for every random number drawn at boot (~1 s per 150 calls).
+    - What is left (`sim/soc/profile.py`): the 100 Hz tick (~25% of cycles: PELT,
+      timekeeping, 64-bit math, SBI round trip) and the initramfs unpack.
+  - **Profiling:** `PC_PROF=1 [PROF_FROM='console text' PROF_TO='text'] CONFIG=mmu
+    sim/soc/run.sh` writes a per-PC cycle profile to `$WORK/soc_<tag>.pcprof`, and
+    `python3 sim/soc/profile.py <pcprof> <System.map> --mmu` sums it by kernel function. On
+    the board, `initcall_debug loglevel=8` in a DTB loaded with `qerv_boot.py --load` times
+    every initcall.
   - **Boot ROM:** `B` boots the kernel in S-mode under the SBI v0.1 shim in the ROM (stack in
     the DT-reserved page 0x807FE000). `sw/mkflash.py --smode` makes `f` / autoboot do the same.
   - **Simulation:** `CONFIG=mmu sim/soc/run.sh` (CPU_SMODE=1, MMU images, boot ROM `B`;
@@ -191,7 +214,9 @@ if it exists.
     `sw/tools/qerv_boot.py --bitstream fpga/impl/pnr/tang9k_soc.fs --linux --mmu`.
   - **MMU timing rule:** keep the TLB compare and the PTE check out of combinational paths
     to and from the bus. The SoC's address decode and read-data mux already make that path
-    long. The first version missed 36 MHz at 29 MHz.
+    long. The first version missed 36 MHz at 29 MHz. A compare may gate a strobe, but never
+    anything that selects the address: `servile_arbiter` selects the address with ibus_stb.
+    A micro-TLB hit gating ibus_cyc fell to 38.7 MHz, which is why the bus is merged.
   - **Tests:**
     - `verif/qerv/run_directed.sh` runs `s2_*` tests with SMODE=1 against `iss.py --smode`
       (`TESTS="s2_mmu"` selects).
