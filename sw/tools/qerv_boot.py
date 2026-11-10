@@ -7,6 +7,9 @@
   sw/tools/qerv_boot.py --bitstream fpga/impl/pnr/tang9k_soc.fs --linux --console
   sw/tools/qerv_boot.py --console              # attach to whatever is running (Ctrl-] quits)
   sw/tools/qerv_boot.py --bitstream ... --linux --mmu   # stage 2: MMU kernel, booted in S-mode
+  sw/tools/qerv_boot.py --bitstream ... --hash-flash flash.bin --flash-boot   # check, boot flash
+  sw/tools/qerv_boot.py --bitstream ... --autoboot      # power-on path: no commands at all
+  sw/tools/qerv_boot.py --reconfig --autoboot           # reload the design in the internal flash
 
 Steps, in order: load the bitstream into SRAM with openFPGALoader (--bitstream; otherwise the
 ROM must already be at its "> " prompt), memory test, uploads (each checked twice: the hash of
@@ -29,6 +32,7 @@ import serial
 IMAGES = "/mnt/data/build/tang9k_linux/images-tang9k"
 IMAGES_MMU = "/mnt/data/build/tang9k_linux/images-tang9k-mmu"
 RAM_BASE, DTB_ADDR = 0x80000000, 0x807FF000
+FLASH_BASE = 0x20000000
 
 
 def djb(data, h=5381):
@@ -93,6 +97,14 @@ def main():
     ap.add_argument("--boot", action="store_true")
     ap.add_argument("--mmu", action="store_true",
                     help=f"stage 2: --linux takes {IMAGES_MMU} and boots with 'B' (S-mode, SBI shim)")
+    ap.add_argument("--reconfig", action="store_true",
+                    help="instead of --bitstream: reconfigure from the FPGA's internal flash "
+                         "(openFPGALoader -r), as at power-on")
+    ap.add_argument("--hash-flash", metavar="FILE",
+                    help="compare the SPI flash (boot ROM 'c' over 0x20000000) with FILE")
+    ap.add_argument("--flash-boot", action="store_true", help="boot from the SPI flash ('f')")
+    ap.add_argument("--autoboot", action="store_true",
+                    help="after --bitstream send nothing: the boot ROM autoboots from flash after 2 s")
     ap.add_argument("--input", default="", help="shell input, '\\n'-separated, typed at each prompt")
     ap.add_argument("--timeout", type=float, default=600, help="console timeout after boot (s)")
     ap.add_argument("--log", help="raw UART log")
@@ -104,19 +116,26 @@ def main():
         a.load += [f"{img}/Image@{RAM_BASE:#x}", f"{img}/{dtb}@{DTB_ADDR:#x}"]
         a.boot = True
 
-    if a.console and not (a.bitstream or a.memtest or a.load or a.boot):
+    if a.console and not (a.bitstream or a.reconfig or a.memtest or a.load or a.boot):
         serial.Serial(a.port, a.baud).close()          # the bridge applies the previous open's rate
         console(a)
 
     log = open(a.log, "wb") if a.log else None
     rom = Rom(a.port, a.baud, log)
     rom.s.reset_input_buffer()
-    if a.bitstream:
-        subprocess.run(["openFPGALoader", "-b", "tangnano9k", a.bitstream], check=True,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if a.bitstream or a.reconfig:
+        cmd = ["openFPGALoader", "-b", "tangnano9k"] + (["-r"] if a.reconfig else [a.bitstream])
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         rom.read_until(rb"QERV boot ROM", 5, echo=False)   # drop what the old design sent
         print("QERV boot ROM")
         rom.prompt()
+        if a.autoboot:                                    # power-on path, timed from the prompt
+            t0 = time.time()
+            rom.read_until(rb"autoboot", 5)
+            rom.read_until(rb"done\r\n", 120)
+            print(f"\n[flash copy done after {time.time() - t0:.1f} s]")
+            ok = shell(rom, a, t0)
+            finish(rom, a, log, ok)
     else:
         rom.send(b"x")                                   # unknown command: "?" and a new prompt
         rom.read_until(rb"\?\r\n> $", 3)
@@ -131,6 +150,19 @@ def main():
         sys.exit(1)
 
     ok = True
+    if a.hash_flash:
+        data = open(a.hash_flash, "rb").read()
+        want = f"{djb(data):08x}".encode()
+        t0 = time.time()
+        rom.send(b"c" + struct.pack("<II", FLASH_BASE, len(data)))
+        out = rom.read_until(rb"ok ([0-9a-f]{8})\r\n> $", 120, echo=False)
+        got = re.search(rb"ok ([0-9a-f]{8})", out).group(1)
+        good = got == want
+        print(f"[flash {len(data)} B: hash {got.decode()} in {time.time() - t0:.1f} s, "
+              f"{os.path.basename(a.hash_flash)} {want.decode()} {'ok' if good else 'MISMATCH'}]")
+        if not good:
+            sys.exit(1)
+
     if a.memtest:
         addr, length = (int(x, 0) for x in a.memtest.split(":"))
         t0 = time.time()
@@ -160,28 +192,38 @@ def main():
         if not good:
             sys.exit(1)
 
-    if a.boot and ok:
+    if (a.boot or a.flash_boot) and ok:
         t0 = time.time()
-        rom.send(b"B" if a.mmu else b"b")
-        lines = [l for l in a.input.replace("\\n", "\n").split("\n")]
-        if lines and lines[-1] == "":
-            lines.pop()
-        try:
-            rom.read_until(rb"Run /init", a.timeout)
-            print(f"\n[Run /init after {time.time() - t0:.1f} s]")
-            rom.read_until(rb"\n[^\n\[]*# $", a.timeout)
-            print(f"\n[shell prompt after {time.time() - t0:.1f} s]")
-            for line in lines:
-                for ch in (line + "\n").encode():
-                    rom.send(bytes([ch]))
-                    try:
-                        rom.read_until(re.escape(bytes([ch])) if ch != 10 else rb"\n", 1)
-                    except TimeoutError:
-                        pass
-                rom.read_until(rb"# $", a.timeout)
-        except TimeoutError as e:
-            print(f"\n[{e}]")
-            ok = False
+        rom.send(b"f" if a.flash_boot else b"B" if a.mmu else b"b")
+        ok = shell(rom, a, t0)
+    finish(rom, a, log, ok)
+
+
+def shell(rom, a, t0):
+    """Follow the kernel boot to the shell prompt, then type --input. True on success."""
+    lines = [l for l in a.input.replace("\\n", "\n").split("\n")]
+    if lines and lines[-1] == "":
+        lines.pop()
+    try:
+        rom.read_until(rb"Run /init", a.timeout)
+        print(f"\n[Run /init after {time.time() - t0:.1f} s]")
+        rom.read_until(rb"\n[^\n\[]*# $", a.timeout)
+        print(f"\n[shell prompt after {time.time() - t0:.1f} s]")
+        for line in lines:
+            for ch in (line + "\n").encode():
+                rom.send(bytes([ch]))
+                try:
+                    rom.read_until(re.escape(bytes([ch])) if ch != 10 else rb"\n", 1)
+                except TimeoutError:
+                    pass
+            rom.read_until(rb"# $", a.timeout)
+    except TimeoutError as e:
+        print(f"\n[{e}]")
+        return False
+    return True
+
+
+def finish(rom, a, log, ok):
     if log:
         log.close()
     if a.console:

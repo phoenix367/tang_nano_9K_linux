@@ -50,6 +50,13 @@ Stage 1 (no-MMU M-mode Linux) is in `doc/stage1_plan.md`.
     at once, and three-stage pipelines work.
   - `/proc/self/maps` shows busybox text mapped r-xp from the page cache (shared, not
     copied).
+  - **Boot from SPI flash:** `sw/tools/flash_linux.sh mmu` writes the image (header flag =
+    S-mode) in 57 s. The boot ROM's hash of the flash matches the file. With the bitstream
+    loaded and no command sent, the ROM autoboots after 2 s: the flash copy is done 5.6 s
+    after the prompt and `~ #` comes at 60.6 s.
+  - **Standalone:** the stage-2 bitstream is in the FPGA's internal flash (openFPGALoader
+    `-f`, 12 s). After a reconfigure from it (as at power-on), the board autoboots Linux to
+    `~ #` with no host commands.
 
 ## Goal and definition of done
 

@@ -67,6 +67,26 @@ if it exists.
   - `--external-flash --dump-flash --file-size N out.bin` reads the external flash. Note
     that the output file is positional; `-o` is the offset. It reads at ~0.65 KB/s and
     erases the SRAM configuration first.
+  - **Writing the external flash:** `sw/tools/flash_linux.sh [mmu|nommu]` (~1 min) runs
+    mkflash and Gowin `programmer_cli --run 38` (exFlash C Bin through the GAO bridge,
+    `--cable-index 4` = "USB Debugger A"). Don't use openFPGALoader `--external-flash -f`
+    for it: it bit-bangs SPI over the 6 MHz JTAG, ~1 h. Three gotchas, all handled by the
+    script:
+    - `programmer_cli` cannot open the JTAG channel while the kernel's `ftdi_sio` holds
+      it (`/dev/ttyUSB0`). openFPGALoader re-attaches it on exit, so the script detaches
+      it via libusb.
+    - The script passes `--location` from `--scan-cables`.
+    - It erases the FPGA's SRAM first (`--run 24`). With a design running, the bridge write
+      crawls (>12 min).
+  - **Internal flash (persistent bitstream):** `openFPGALoader -b tangnano9k -f <fs>`, ~12 s
+    with a CRC check. `qerv_boot.py --reconfig` reloads it (openFPGALoader -r), as at
+    power-on.
+  - **What the board holds now:** the stage-2 bitstream (SMODE=1, reset on pin 3) in the
+    internal flash, and the MMU Linux image (S-mode flag) in the SPI flash. At power-up it
+    autoboots Linux: `~ #` about 61 s after the boot ROM prompt.
+  - **Checking the flash:** `qerv_boot.py --hash-flash flash.bin` has the boot ROM hash the
+    flash window (2.7 MB in ~18 s). `--flash-boot` boots it, and `--autoboot` loads the
+    bitstream and sends nothing (the power-up path).
   - The console UART is `/dev/ttyUSB1` (interface 1); JTAG is interface 0.
 - **Fit probes** (`fit/<probe>/`) measure one CPU core alone on the GW1NR-9:
   - **Wrapper:** an LFSR drives the CPU's inputs and every output is XOR-folded onto one LED,
