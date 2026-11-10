@@ -6,6 +6,8 @@
 //   +input=<text>         typed at the shell prompt ("\n" = newline), one line per prompt;
 //                         the run ends at the prompt after the last line. Each character
 //                         waits for its echo (the polled UART reads one FIFO per tick).
+//   +rom_input=<file>     boot ROM commands: records of {u32 length (LE), bytes}, one record
+//                         sent back-to-back after each boot ROM "> " prompt
 //   +uart_log=<file>      console copy
 //   +fetch_trace=<file>   one little-endian u32 PC per instruction fetch
 //   +quiet                no console on stdout
@@ -16,6 +18,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "Vtb_soc.h"
 #include "verilated.h"
@@ -43,6 +46,22 @@ int main(int argc, char **argv) {
       if (p[0] == '\\' && p[1] == 'n') { input += '\n'; p++; } else input += *p;
     }
   }
+  std::vector<std::string> rom_recs;
+  if (const char *a = plusarg("rom_input=")) {
+    FILE *f = fopen(a, "rb");
+    if (!f) { fprintf(stderr, "cannot open %s\n", a); return 2; }
+    uint8_t h[4];
+    while (fread(h, 1, 4, f) == 4) {
+      uint32_t n = h[0] | h[1] << 8 | h[2] << 16 | (uint32_t)h[3] << 24;
+      std::string r(n, '\0');
+      if (n && fread(&r[0], 1, n, f) != n) break;
+      rom_recs.push_back(r);
+    }
+    fclose(f);
+  }
+  size_t rom_rec = 0, rom_pos = 0;
+  std::string rom_buf;
+  char prev_ch = 0;
   int input_lines = 0;
   for (char c : input) input_lines += c == '\n';
   FILE *ulog = nullptr, *ftrace = nullptr;
@@ -125,6 +144,11 @@ int main(int argc, char **argv) {
       char ch = (char)top->tx_byte;
       if (!quiet) { fputc(ch, stdout); fflush(stdout); }
       if (ulog) fputc(ch, ulog);
+      if (prev_ch == '>' && ch == ' ' && rom_pos >= rom_buf.size() && rom_rec < rom_recs.size()) {
+        rom_buf = rom_recs[rom_rec++];
+        rom_pos = 0;
+      }
+      prev_ch = ch;
       if (ch) {
         tail += ch;
         if (tail.size() > 512) tail.erase(0, 256);
@@ -156,12 +180,17 @@ int main(int argc, char **argv) {
     if (milestone_cycle[3]) { end_reason = "kernel_panic"; break; }
     if (top->poweroff) { end_reason = "poweroff"; break; }
 
-    // ---- UART RX: type the input, one character per echo
+    // ---- UART RX: boot ROM records stream back-to-back; shell input waits for each echo
+    if (rx_bit < 0 && rom_pos < rom_buf.size()) {
+      rx_char = (uint8_t)rom_buf[rom_pos++];
+      rx_bit = 0;
+      if (rx_next < cycle) rx_next = cycle;   // after the full stop bit of the previous byte
+    }
     if (feeding && line_ready && rx_bit < 0 && !wait_echo && in_pos < input.size()) {
       rx_char = (uint8_t)input[in_pos++];
       if (rx_char == '\n') line_ready = false;    // wait for the next prompt
       rx_bit = 0;
-      rx_next = cycle;
+      if (rx_next < cycle) rx_next = cycle;
       wait_echo = true;
       echo_deadline = cycle + clk_hz / 20;         // give up waiting after 50 ms
     }

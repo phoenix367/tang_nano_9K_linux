@@ -1,0 +1,44 @@
+# Tang Nano 9K stage 2: RV32IMA (no C/F/D) Linux with SV32 MMU, S-mode kernel, for the QERV
+# SoC with the stage-2 CPU. Build with CONFIG=mmu sw/build.sh. See doc/stage2_plan.md.
+
+# Target: rv32ima, ilp32, MMU -> uClibc-ng (the soft-float setup stage 1 proved), ELF
+BR2_riscv=y
+BR2_riscv_custom=y
+BR2_RISCV_ISA_RVM=y
+BR2_RISCV_ISA_RVA=y
+# BR2_RISCV_ISA_RVF is not set
+# BR2_RISCV_ISA_RVC is not set
+BR2_RISCV_32=y
+BR2_RISCV_USE_MMU=y
+BR2_RISCV_ABI_ILP32=y
+BR2_TOOLCHAIN_BUILDROOT_UCLIBC=y
+BR2_PACKAGE_HOST_LINUX_HEADERS_CUSTOM_6_18=y
+# Static: only busybox runs, and its text is shared through the page cache anyway
+BR2_STATIC_LIBS=y
+BR2_OPTIMIZE_S=y
+BR2_TARGET_OPTIMIZATION="-fno-asynchronous-unwind-tables -fno-unwind-tables"
+BR2_PTHREADS_NONE=y
+
+BR2_GLOBAL_PATCH_DIR="board/qemu/patches"
+BR2_DOWNLOAD_FORCE_CHECK_HASHES=y
+
+BR2_TARGET_GENERIC_HOSTNAME="tang9k"
+BR2_TARGET_GENERIC_ISSUE="Tang Nano 9K / QERV (MMU)"
+# BR2_TARGET_GENERIC_GETTY is not set
+BR2_SYSTEM_DHCP=""
+BR2_ROOTFS_OVERLAY="$(BR2_EXTERNAL_TANG9K_PATH)/board/tang9k/rootfs-overlay"
+
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_VERSION=y
+BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE="6.18.7"
+BR2_LINUX_KERNEL_USE_CUSTOM_CONFIG=y
+BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(BR2_EXTERNAL_TANG9K_PATH)/board/tang9k-mmu/linux.config"
+BR2_LINUX_KERNEL_DTS_SUPPORT=y
+BR2_LINUX_KERNEL_CUSTOM_DTS_PATH="$(BR2_EXTERNAL_TANG9K_PATH)/board/tang9k-mmu/tang9k-mmu.dts"
+
+BR2_PACKAGE_BUSYBOX_CONFIG="$(BR2_EXTERNAL_TANG9K_PATH)/board/tang9k/busybox.config"
+
+BR2_TARGET_ROOTFS_CPIO=y
+BR2_TARGET_ROOTFS_CPIO_NONE=y
+BR2_TARGET_ROOTFS_INITRAMFS=y
+# BR2_TARGET_ROOTFS_TAR is not set

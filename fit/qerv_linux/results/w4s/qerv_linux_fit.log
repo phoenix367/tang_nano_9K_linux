@@ -1,0 +1,29 @@
+Reading netlist file: "/home/ivan/projects/tang_nano_9k_linux/fit/qerv_linux/impl/gwsynthesis/qerv_linux_fit.vg"
+Parsing netlist file "/home/ivan/projects/tang_nano_9k_linux/fit/qerv_linux/impl/gwsynthesis/qerv_linux_fit.vg" completed
+Processing netlist completed
+Reading constraint file: "/home/ivan/projects/tang_nano_9k_linux/fit/common/probe.cst"
+Physical Constraint parsed completed
+Running placement......
+[10%] Placement Phase 0 completed
+[20%] Placement Phase 1 completed
+[30%] Placement Phase 2 completed
+[50%] Placement Phase 3 completed
+Running routing......
+[60%] Routing Phase 0 completed
+[70%] Routing Phase 1 completed
+[80%] Routing Phase 2 completed
+[90%] Routing Phase 3 completed
+Running timing analysis......
+[95%] Timing analysis completed
+Placement and routing completed
+Bitstream generation in progress......
+Bitstream generation completed
+Running power analysis......
+[100%] Power analysis completed
+Generate file "/home/ivan/projects/tang_nano_9k_linux/fit/qerv_linux/impl/pnr/qerv_linux_fit.power.html" completed
+Generate file "/home/ivan/projects/tang_nano_9k_linux/fit/qerv_linux/impl/pnr/qerv_linux_fit.pin.html" completed
+Generate file "/home/ivan/projects/tang_nano_9k_linux/fit/qerv_linux/impl/pnr/qerv_linux_fit.rpt.html" completed
+Generate file "/home/ivan/projects/tang_nano_9k_linux/fit/qerv_linux/impl/pnr/qerv_linux_fit.rpt.txt" completed
+Generate file "/home/ivan/projects/tang_nano_9k_linux/fit/qerv_linux/impl/pnr/qerv_linux_fit.tr.html" completed
+Tue Nov 10 13:08:02 2026
+

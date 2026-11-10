@@ -19,7 +19,8 @@ module clint #(
     input  wire        i_cyc,
     output reg  [31:0] o_rdt,
     output reg         o_ack,
-    output wire        o_mtip
+    output wire        o_mtip,
+    output wire [63:0] o_mtime            // for the stage-2 CPU's time/timeh CSRs
 );
 
   localparam integer DIV_I = CLK_HZ / 1000000;
@@ -30,6 +31,7 @@ module clint #(
   reg [15:0] pre;
 
   assign o_mtip = mtime >= mtimecmp;
+  assign o_mtime = mtime;
 
   wire       access = i_cyc & !o_ack;
   wire [13:0] a = i_adr[15:2];

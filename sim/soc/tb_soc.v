@@ -9,6 +9,7 @@ module tb_soc #(
     parameter CLK_HZ       = 27000000,
     parameter UART_BAUD    = 1000000,
     parameter CPU_W        = 4,
+    parameter CPU_SMODE    = 0,
     parameter CALIB_CYCLES = 200
 ) (
     input  wire        clk,
@@ -43,6 +44,7 @@ module tb_soc #(
 
   soc_top #(
       .CPU_W       (CPU_W),
+      .CPU_SMODE   (CPU_SMODE[0]),
       .CLK_HZ      (CLK_HZ),
       .UART_BAUD   (UART_BAUD),
       .BOOTROM_FILE(BOOTROM_FILE)

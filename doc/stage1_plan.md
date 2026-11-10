@@ -250,6 +250,32 @@ cost in the budget below.
 
 Done when PnR closes at 27 MHz with margin and utilization is recorded.
 
+**Status (2026-11-10): met.** `fpga/build.sh` builds `fpga/tang9k_soc.gprj` (top
+`fpga/src/tang9k_top.v`).
+- **Clocks:** memory_clk 72 MHz (rPLL 27 × 8 / 3, written by hand in
+  `fpga/src/gowin_rpll/gowin_rpll.v`); SoC on the IP's clk_out at 36 MHz, which divides the
+  CLINT's 1 MHz and the 1 Mbaud UART exactly.
+- **PSRAM calibration vs memory_clk (board, `fpga/probe/run.sh`, IP netlist below):** both
+  channels calibrate at 54, 67.5, 72–77.1, 84–135 MHz (in ~15–27 ms). At 77.6 and 78 MHz
+  channel 1 never calibrates; at 81 MHz neither does. 78 MHz was the first choice and hung
+  the CPU on its first PSRAM access; 72 MHz is ~5 MHz clear of the band.
+- **PSRAM IP:** the ov7670 project's generated netlist (`psram_hs_2ch` v1.0, generated for
+  135 MHz, module `Video_frame_buffer`), copied unchanged. It is the netlist the simulation
+  model was matched to. The IDE in 1.9.12 lists this IP under "Deprecated"; IP generation
+  there failed on the license.
+- **Utilization:** logic 3,869/8,640 (45%), FF 1,965, CLS 60%, BSRAM 11/26, DSP 2,
+  IOLOGIC 39/97.
+- **Timing:** cpu_clk Fmax 43.1 MHz against 36 MHz (with the SYSCON status counters; 46.9
+  MHz before them). Setup is clean everywhere.
+- **Hold:** 11 violations, all inside the IP, `u_psram_init/calib_0_s0` (cpu_clk) → IDES4
+  CALIB (memory_clk), worst −0.84 ns. This is the class the ov7670 build has (3 paths, worst
+  −0.25 ns there), not reachable from user SDC; the PSRAM calibrates on that board.
+  Watch the calibration LED and the M4 memtest.
+- **Flash:** JEDEC `85 60 16` (Puya, 4 MB). Pins 59–62 are the MSPI dual-purpose pins, so
+  the build sets `use_mspi_as_gpio`. openFPGALoader reads it over JTAG at only ~0.65 KB/s,
+  so load kernels over UART during bring-up. It held ~11.7 KB of RISC-V code at offset 0
+  (likely the factory demo).
+
 ### M4: hardware bring-up ladder
 
 Each step gets a small test program run from the boot ROM or loaded over UART:
@@ -263,6 +289,20 @@ Each step gets a small test program run from the boot ROM or loaded over UART:
 8. Measure boot time, then raise cpu_clk to ~50 MHz.
 
 Done when the stage-1 definition of done above is met.
+
+**Status (2026-11-10): steps 1, 2, 5 and 6 pass on the board.** The boot ROM
+(`sw/bootrom/bootrom.S`) is a command monitor driven by `sw/tools/qerv_boot.py`:
+- **1 Banner:** at 1 Mbaud.
+- **2 Memtest:** all 8 MB through the cache (address-in-data, inverted, byte lanes) in 46 s.
+- **5 UART download:** 2.7 MB Image in 27 s (98 KB/s), checked by the receive hash and a
+  re-hash of PSRAM.
+- **6 Linux to shell:** `Run /init` at 37.7 s and `~ #` at 43.2 s after `b` (36 MHz). `free`,
+  `uname`, `/proc/cpuinfo` and `/proc/meminfo` work. About 32 s of the boot is the kernel
+  between `workingset` and the 8250 probe (initramfs unpacking).
+- **Still open:** step 3 (CLINT timer) and 4 (LR/SC/AMO) have no dedicated test, though
+  Linux exercises both. Step 7 (boot from SPI flash) needs the image written to the
+  flash, ~1 h over JTAG with openFPGALoader. Step 8 (faster clock) is limited by the IP
+  calibration band and Fmax ~43 MHz.
 
 ## Resource budget (estimate except where marked)
 

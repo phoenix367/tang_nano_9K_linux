@@ -17,7 +17,8 @@ module soc_top #(
     parameter CACHE_LINES    = 512,
     parameter BOOTROM_WORDS  = 1024,
     parameter BOOTROM_FILE   = "",
-    parameter CLINT_EXT_TICK = 0
+    parameter CLINT_EXT_TICK = 0,
+    parameter [0:0] CPU_SMODE = 1'b0    // stage 2: S-mode + SV32 MMU (doc/stage2_plan.md)
 ) (
     input  wire        i_clk,
     input  wire        i_rst,
@@ -68,11 +69,13 @@ module soc_top #(
   wire [ 3:0] dbus_sel;
   wire        ibus_cyc, ibus_ack, dbus_we, dbus_cyc, dbus_ack;
   wire        mtip;
+  wire [63:0] mtime;
 
-  qerv_cpu #(.W(CPU_W), .RESET_PC(32'h0000_0000)) cpu (
+  qerv_cpu #(.W(CPU_W), .RESET_PC(32'h0000_0000), .SMODE(CPU_SMODE)) cpu (
       .i_clk      (i_clk),
       .i_rst      (cpu_rst),
       .i_timer_irq(mtip),
+      .i_mtime    (mtime),
       .o_ibus_adr (ibus_adr),
       .o_ibus_cyc (ibus_cyc),
       .i_ibus_rdt (ibus_rdt),
@@ -129,7 +132,7 @@ module soc_top #(
   always @(posedge i_clk) none_ack <= !i_rst & m_stb & s_none & !none_ack;
 
   assign m_rdt = s_rom ? rom_rdt : s_uart ? uart_rdt : s_clint ? clint_rdt :
-                 s_flash ? flash_rdt : s_mem ? mem_rdt : 32'd0;
+                 s_sys ? sys_rdt : s_flash ? flash_rdt : s_mem ? mem_rdt : 32'd0;
   assign m_ack = rom_ack | uart_ack | clint_ack | sys_ack | flash_ack | mem_ack | none_ack;
 
   // ---------------------------------------------------------------- slaves
@@ -169,19 +172,38 @@ module soc_top #(
       .i_cyc (m_stb & s_clint),
       .o_rdt (clint_rdt),
       .o_ack (clint_ack),
-      .o_mtip(mtip)
+      .o_mtip(mtip),
+      .o_mtime(mtime)
   );
 
-  syscon sys (
+  wire [31:0] cache_hits, cache_misses, cache_writebacks;
+
+  // SYSCON status words (read at 0x1110_0000 + 4*i), for bring-up:
+  //   0 {30'b0, calib1, calib0}   1/2 PSRAM commands issued, channel 0/1
+  //   3/4 rd_data_valid beats, channel 0/1   5 cache misses   6 cache write-backs   7 0
+  reg [31:0] n_cmd0, n_cmd1, n_rdv0, n_rdv1;
+  always @(posedge i_clk)
+    if (i_rst) {n_cmd0, n_cmd1, n_rdv0, n_rdv1} <= 128'd0;
+    else begin
+      n_cmd0 <= n_cmd0 + {31'd0, o_cmd_en0};
+      n_cmd1 <= n_cmd1 + {31'd0, o_cmd_en1};
+      n_rdv0 <= n_rdv0 + {31'd0, i_rd_data_valid0};
+      n_rdv1 <= n_rdv1 + {31'd0, i_rd_data_valid1};
+    end
+
+  syscon #(.WORDS(8)) sys (
       .i_clk     (i_clk),
       .i_rst     (i_rst),
+      .i_adr     (m_adr[4:2]),
       .i_dat     (m_dat),
       .i_we      (m_we),
       .i_cyc     (m_stb & s_sys),
       .o_rdt     (sys_rdt),
       .o_ack     (sys_ack),
       .o_poweroff(o_poweroff),
-      .o_reboot  (reboot)
+      .o_reboot  (reboot),
+      .i_status  ({32'd0, cache_writebacks, cache_misses, n_rdv1, n_rdv0, n_cmd1, n_cmd0,
+                   30'd0, i_calib1, i_calib0})
   );
 
   spi_flash_xip flash (
@@ -197,8 +219,6 @@ module soc_top #(
       .o_mosi(o_flash_mosi),
       .i_miso(i_flash_miso)
   );
-
-  wire [31:0] cache_hits, cache_misses, cache_writebacks;
 
   l1_cache #(.LINES(CACHE_LINES)) cache (
       .i_clk           (i_clk),
@@ -230,7 +250,7 @@ module soc_top #(
       .o_writebacks    (cache_writebacks)
   );
 
-  wire unused = &{1'b0, sys_rdt, cache_hits, cache_misses, cache_writebacks};
+  wire unused = &{1'b0, cache_hits};
 
 endmodule
 

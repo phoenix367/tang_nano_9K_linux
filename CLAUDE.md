@@ -5,18 +5,69 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project status and goal
 
 Experimental, greenfield: bring up a Linux kernel on a **Tang Nano 9K** by putting a RISC-V
-soft core into the FPGA with the on-package PSRAM as main memory. No SoC RTL or core choice
-yet; so far there are only fit probes and the perf model (below). The chosen direction is
-QERV extended for no-MMU M-mode Linux. Its milestones (M0 software image in the emulator →
+soft core into the FPGA with the on-package PSRAM as main memory. The core is QERV (SERV
+W=4) extended for no-MMU M-mode Linux. M0–M3 are done, and in M4 Linux boots to a shell on
+the board (UART-loaded, `~ #` in 43 s at 36 MHz). Stage 2 (SV32 MMU, S-mode kernel under a
+ROM SBI shim) also boots to a shell on the board (`~ #` in 55 s, real fork/pipelines);
+`doc/stage2_plan.md` has the plan and status. The stage-1 milestones (M0 software image in the emulator →
 M1 core → M2 SoC sim → M3 fit → M4 board), memory map and open decisions are in
 `doc/stage1_plan.md`. Update this file as decisions land. Don't describe planned structure as
 if it exists.
 
 ## Build commands
 
-- `scripts/gw_run.sh` (+ `gw_run.tcl`, copied unchanged from the ov7670 project) runs `gw_sh`
-  headlessly. Env: `GOWIN_PATH`, `GPRJ`, `STAGE=syn|pnr|all`, `TOP`, optional
-  `PLACE_OPTION`/`ROUTE_OPTION`. A full synth + PnR of a fit probe takes 1–2 min.
+- `scripts/gw_run.sh` (+ `gw_run.tcl`, from the ov7670 project) runs `gw_sh` headlessly.
+  Env: `GOWIN_PATH`, `GPRJ`, `STAGE=syn|pnr|all`, `TOP`, optional
+  `PLACE_OPTION`/`ROUTE_OPTION`, and `GW_OPTIONS` ("-name value" pairs for `set_option`,
+  added here). A full synth + PnR of a fit probe takes 1–2 min.
+- **Board build (M3):** `fpga/build.sh` (~2 min) writes `fpga/build/` (boot ROM hex and
+  `tang9k_cfg.v` with `TANG9K_CPU_HZ` and the hex path; `fpga/build.sh prep` does only this)
+  and builds `fpga/tang9k_soc.gprj`, top `fpga/src/tang9k_top.v`. The bitstream is
+  `fpga/impl/pnr/tang9k_soc.fs`.
+  - **Clocks:** the rPLL makes memory_clk = 72 MHz; the SoC runs on the IP's clk_out
+    (36 MHz). The rPLL wrapper `fpga/src/gowin_rpll/gowin_rpll.v` is written by hand (the
+    user's call: no regeneration needed). If its frequency changes, change the SDC's
+    multiply/divide and `CPU_HZ` too.
+  - **Avoid memory_clk ~77.6–81 MHz:** with this IP netlist, PSRAM channel 1 (and at 81 MHz
+    both) never calibrates there, and the CPU hangs on its first PSRAM access. 54–77.1 and
+    84–135 MHz calibrate. `fpga/probe/run.sh TAG IDIV FBDIV ODIV` builds a CPU-less probe
+    (rPLL + IP + a 27 MHz beacon UART printing lock/calib) in ~15 s and loads it.
+  - **PSRAM IP:** `fpga/src/psram_memory_interface_hs_2ch/` is the ov7670 project's
+    generated netlist, copied unchanged (135 MHz settings, module `Video_frame_buffer`).
+    IP generation in this machine's IDE fails on the license.
+  - **Board top:** UART 1 Mbaud (`BAUD` env of `fpga/build.sh`; the divider is fixed in
+    hardware). The button labelled S2 is the system reset. That is pin 3 on our board: the
+    Sipeed schematic names pin 4 S2, but this board's S1/S2 silkscreen is swapped (checked by
+    pressing). It is synchronized and debounced (2.4 ms) in the
+    27 MHz domain, with a ~10 ms power-on reset. It resets the PSRAM IP (which recalibrates;
+    RAM contents are not kept), cache, TLB, CPU and peripherals, so the boot ROM starts over. LEDs: heartbeat,
+    PLL lock, PSRAM calibrated, UART TX, reset, poweroff.
+  - **SYSCON status words** (read at 0x1110_0000 + 4·i, layout in `soc_top.v`): calib bits,
+    PSRAM commands and read beats per channel, cache misses and write-backs.
+  - **Flash pins (59–62) are MSPI dual-purpose pins:** the build passes
+    `GW_OPTIONS="-use_mspi_as_gpio 1 -use_sspi_as_gpio 1"`. A build from the IDE needs the
+    same in Project → Configuration → Dual-Purpose Pin.
+  - **Results:** see `doc/stage1_plan.md` M3/M4 (50% logic, Fmax 43.1 MHz vs 36, 11
+    IP-internal hold violations of the known ov7670 class).
+- **Boot ROM monitor + host tool (M4):** `sw/bootrom/bootrom.S` prints a banner and a `> `
+  prompt and takes single-byte commands with binary LE arguments: `l` load (replies a djb2
+  hash), `c` hash memory, `m` memtest, `s` status, `b` boot RAM, `f` boot from flash
+  (autoboot after 2 s if the flash holds an image), `q`/`r` poweroff/reboot.
+  - `sw/tools/qerv_boot.py --bitstream fpga/impl/pnr/tang9k_soc.fs --linux [--memtest]
+    [--input 'cmd\n...']` loads the bitstream into SRAM, uploads Image + DTB, boots, logs
+    the console and types the input (one character per echo).
+  - **The BL702 USB-UART bridge applies the baud rate of the previous port open**, so open
+    the port twice (`qerv_boot.py` and `fpga/probe/beacon.py` do).
+  - In simulation, `sim/soc/run.sh` sends `b` (or `f` with `FLASH=1`) at the prompt;
+    `ROM_INPUT=<records>` overrides that (`sim_main.cpp` `+rom_input`: records of
+    {u32 length, bytes}, one per `> ` prompt). `sim/soc/test_bootrom.py` (~1 min) checks
+    every command.
+- **Board access:** the Tang Nano 9K shows up as FT2232 `0403:6010`.
+  - `openFPGALoader -b tangnano9k --detect` sees the GW1N(R)-9C.
+  - `--external-flash --dump-flash --file-size N out.bin` reads the external flash. Note
+    that the output file is positional; `-o` is the offset. It reads at ~0.65 KB/s and
+    erases the SRAM configuration first.
+  - The console UART is `/dev/ttyUSB1` (interface 1); JTAG is interface 0.
 - **Fit probes** (`fit/<probe>/`) measure one CPU core alone on the GW1NR-9:
   - **Wrapper:** an LFSR drives the CPU's inputs and every output is XOR-folded onto one LED,
     so nothing is pruned and the design still goes through PnR. This adds ~100 LUTs and ~70 FFs.
@@ -81,9 +132,12 @@ if it exists.
     - Its `clk` input must be the free-running 27 MHz reference, and `pll_lock` must be high.
     - init_calib rises ~15.6 ms after reset.
     - memory_clk = 2 × clk_out is fixed; the GUI accepts 50–250 MHz.
-    - The IP's fixed ~3.2 ns CK shift is a quarter period near 78 MHz, so aim for memory_clk
-      ≈ 80 MHz (CPU on clk_out at 40 MHz) rather than 54 MHz.
-    - The IP must be regenerated in the Gowin GUI; headless gw_sh can't do it for this IP.
+    - memory_clk is 72 MHz (CPU 36 MHz). The earlier reasoning that the IP's fixed ~3.2 ns
+      CK shift favours ~78 MHz was wrong on hardware: 78 MHz sits in the calibration band.
+    - Headless gw_sh can't generate this IP. In the 1.9.12 IDE it is under "Deprecated"
+      ("PSRAM Memory Interface HS 2CH"). The non-deprecated "PSRAM Memory Interface HS" has
+      a 1-channel ×16 mode (one 64-bit port) and a 2-channel mode with extra `cmd_rdy0/1` and
+      different clocking; neither has been checked against the model.
     - The 135 MHz netlist also passed the IP-vs-model compare at memory_clk 54 and 100 MHz in
       simulation. At read delays of 9.2/12.9 ns the read latency shifts (model mismatch),
       which the rd_data_valid-driven cache tolerates.
@@ -103,6 +157,30 @@ if it exists.
   - **Verilator gotchas:**
     - A comment that starts with "Verilator" is parsed as a directive.
     - `commandArgsPlusMatch` returns "" (not NULL) when a plusarg is absent.
+- **Stage 2 (doc/stage2_plan.md):**
+  - **CPU:** `qerv_cpu` `SMODE=1` = SERV `LINUX=1 SMODE=1` (U/S/M, delegation, sret, S CSRs,
+    satp, time/timeh from the CLINT's mtime) + `rtl/qerv/sv32_mmu.v` (TLB in BSRAM, read-only
+    walker, Svade). `SMODE=0` is the stage-1 core, unchanged (CPI and tests identical).
+  - **Software:** `CONFIG=mmu sw/build.sh` → `images-tang9k-mmu/`. Keep `CONFIG_EFI` off: it
+    forces the C extension on.
+  - **Boot ROM:** `B` boots the kernel in S-mode under the SBI v0.1 shim in the ROM (stack in
+    the DT-reserved page 0x807FE000). `sw/mkflash.py --smode` makes `f` / autoboot do the same.
+  - **Simulation:** `CONFIG=mmu sim/soc/run.sh` (CPU_SMODE=1, MMU images, boot ROM `B`;
+    results in `sim/soc/results/soc_w4-mmu.*`).
+  - **Board:** `SMODE=1 fpga/build.sh` (default 0 = stage-1 CPU), then
+    `sw/tools/qerv_boot.py --bitstream fpga/impl/pnr/tang9k_soc.fs --linux --mmu`.
+  - **MMU timing rule:** keep the TLB compare and the PTE check out of combinational paths
+    to and from the bus. The SoC's address decode and read-data mux already make that path
+    long. The first version missed 36 MHz at 29 MHz.
+  - **Tests:**
+    - `verif/qerv/run_directed.sh` runs `s2_*` tests with SMODE=1 against `iss.py --smode`
+      (`TESTS="s2_mmu"` selects).
+    - `SMODE=1 [ENV=v] verif/qerv/run_riscv_tests.sh` runs the riscv-tests on the stage-2
+      core. `ENV=v` (user tests on demand-paged SV32, 512 KB TB RAM) takes ~10 min at W=4.
+    - `rv32si-p-dirty` is skipped because MPRV is not implemented.
+  - **Debug:** the testbench takes `+vcd=<f> +vcd_start=<cycle> +vcd_end=<cycle>`. Trap-entry
+    RF writes trail the serial counter, so anything that selects their RF address must stay
+    stable until the next fetch (see `tpriv` in serv_csr).
 - **QERV-Linux CPU (M1):** `rtl/qerv/qerv_cpu.v` = SERV `LINUX=1` + MDU + `rtl/qerv/amo_unit.v`.
   - `verif/qerv/run_riscv_tests.sh` runs riscv-tests rv32ui/um/ua, p env, in U-mode via `mret`.
     It runs at W=4 and W=1 in ~50 s (env `WIDTHS`, `SUITES`). `ma_data` is skipped because

@@ -1,0 +1,92 @@
+// Tang Nano 9K QERV SoC, stage 2: S-mode kernel with SV32 under the boot ROM's SBI v0.1 shim
+// (doc/stage2_plan.md). Same memory map as stage 1. The boot ROM loads this DTB at 0x807FF000
+// and passes it in a1. The CLINT belongs to the firmware (the kernel's timer goes through SBI
+// set_timer and reads the time CSR), so it is not described here.
+/dts-v1/;
+
+/ {
+	#address-cells = <2>;
+	#size-cells = <2>;
+	compatible = "tang9k,qerv-soc";
+	model = "Tang Nano 9K QERV (MMU)";
+
+	chosen {
+		bootargs = "earlycon=uart8250,mmio,0x10000000,1000000 console=ttyS0";
+		stdout-path = &uart0;
+	};
+
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x0 0x80000000 0x0 0x800000>;	/* 8 MB PSRAM */
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/* M-mode firmware stack/scratch (boot ROM SBI shim). Mapped, not used by Linux, so
+		   the linear map keeps its 4 MB megapages. */
+		sbi@807fe000 {
+			reg = <0x0 0x807fe000 0x0 0x1000>;
+		};
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		timebase-frequency = <1000000>;		/* CLINT mtime / time CSR at 1 MHz */
+
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			reg = <0>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv32ima";
+			riscv,isa-base = "rv32i";
+			riscv,isa-extensions = "i", "m", "a", "zicsr", "zifencei";
+			mmu-type = "riscv,sv32";
+
+			cpu0_intc: interrupt-controller {
+				#interrupt-cells = <1>;
+				interrupt-controller;
+				compatible = "riscv,cpu-intc";
+			};
+		};
+	};
+
+	soc {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		compatible = "simple-bus";
+		ranges;
+
+		/* 16550 register subset, fixed baud (divisor latch ignored), polled: no IRQ. */
+		uart0: serial@10000000 {
+			compatible = "ns16550a";
+			reg = <0x0 0x10000000 0x0 0x100>;
+			clock-frequency = <16000000>;
+			current-speed = <1000000>;
+			no-loopback-test;
+		};
+
+		syscon: syscon@11100000 {
+			compatible = "syscon";
+			reg = <0x0 0x11100000 0x0 0x1000>;
+		};
+
+		poweroff {
+			compatible = "syscon-poweroff";
+			regmap = <&syscon>;
+			offset = <0x0>;
+			value = <0x5555>;
+		};
+
+		reboot {
+			compatible = "syscon-reboot";
+			regmap = <&syscon>;
+			offset = <0x0>;
+			value = <0x7777>;
+		};
+	};
+};

@@ -2,6 +2,7 @@
 //
 // qerv_cpu -> servile_arbiter -> servant_ram (registered ack, like perf/serv_cpi), plus:
 //   * a store to MTIP_ADR sets the timer interrupt line to bit 0 of the data,
+//   * stores to MTIME_ADR / MTIME_ADR+4 set the low / high half of mtime (SMODE time CSR),
 //   * a store to HALT_ADR ends the run (directed tests: 0 = pass, else failing test id),
 //   * a store to +tohost=<hex> ends the run (riscv-tests: 1 = pass, else (n << 1) | 1).
 // RAM is MEMSIZE bytes and decodes only the low address bits, so programs can be linked at
@@ -21,6 +22,8 @@ module qerv_tb;
   parameter        memfile  = "";
   parameter        MEMSIZE  = 65536;
   parameter [31:0] MTIP_ADR = 32'h8000_FFF8;
+  parameter [31:0] MTIME_ADR = 32'h8000_FFF0;
+  parameter [0:0]  SMODE    = 1'b0;
   parameter [31:0] HALT_ADR = 32'h8000_FFFC;
   parameter        EXTRA_WAIT = 0;
   parameter        TIMEOUT  = 20000000;
@@ -37,16 +40,18 @@ module qerv_tb;
     if (cycle == 64'd8) rst <= 1'b0;
   end
 
-  reg mtip = 1'b0;
+  reg        mtip = 1'b0;
+  reg [63:0] mtime = 64'd0;
 
   wire [31:0] ibus_adr, ibus_rdt, dbus_adr, dbus_dat, dbus_rdt;
   wire [ 3:0] dbus_sel;
   wire        ibus_cyc, ibus_ack, dbus_we, dbus_cyc, dbus_ack;
 
-  qerv_cpu #(.W(W), .RESET_PC(RESET_PC)) cpu (
+  qerv_cpu #(.W(W), .RESET_PC(RESET_PC), .SMODE(SMODE)) cpu (
       .i_clk      (clk),
       .i_rst      (rst),
       .i_timer_irq(mtip),
+      .i_mtime    (mtime),
       .o_ibus_adr (ibus_adr),
       .o_ibus_cyc (ibus_cyc),
       .i_ibus_rdt (ibus_rdt),
@@ -132,6 +137,20 @@ module qerv_tb;
     if ($value$plusargs("trace=%s", tracefile)) f = $fopen(tracefile, "w");
   end
 
+  // +vcd=<file> +vcd_start=<cycle> +vcd_end=<cycle>: waveform of the CPU in that window
+  reg [1023:0] vcdfile;
+  reg [63:0]   vcd_start = 0, vcd_end = 0;
+  initial
+    if ($value$plusargs("vcd=%s", vcdfile)) begin
+      if (!$value$plusargs("vcd_start=%d", vcd_start)) vcd_start = 0;
+      if (!$value$plusargs("vcd_end=%d", vcd_end)) vcd_end = 64'hFFFFFFFF;
+      wait (cycle == vcd_start);
+      $dumpfile(vcdfile);
+      $dumpvars(0, cpu);
+      wait (cycle == vcd_end);
+      $dumpoff;
+    end
+
   task finish(input [8*8-1:0] what, input [31:0] value);
     begin
       $display("%0s value=%08h cycle=%0d fetches=%0d", what, value, cycle, n_fetch);
@@ -149,6 +168,8 @@ module qerv_tb;
       if (mem_ack & mem_we) begin  // only the data side writes
         if (f) $fwrite(f, "S %08h %08h %1h %0d\n", mem_adr, mem_dat, mem_sel, cycle);
         if (mem_adr == MTIP_ADR) mtip = mem_dat[0];
+        if (mem_adr == MTIME_ADR) mtime[31:0] = mem_dat;
+        if (mem_adr == MTIME_ADR + 4) mtime[63:32] = mem_dat;
         if (mem_adr == HALT_ADR) finish("HALT", mem_dat);
         if (mem_adr == tohost) finish("TOHOST", mem_dat);
       end

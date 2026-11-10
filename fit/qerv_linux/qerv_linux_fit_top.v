@@ -30,10 +30,11 @@ module qerv_linux_fit_top (
   wire [ 3:0] dbus_sel;
   wire        ibus_cyc, dbus_we, dbus_cyc;
 
-  qerv_cpu #(.W(`SERV_W), .RESET_PC(32'h0)) cpu (
+  qerv_cpu #(.W(`SERV_W), .RESET_PC(32'h0), .SMODE(`SERV_SMODE)) cpu (
       .i_clk      (clk),
       .i_rst      (rst),
       .i_timer_irq(lfsr[40] & lfsr[47] & lfsr[54]),
+      .i_mtime    (lfsr),
       .o_ibus_adr (ibus_adr),
       .o_ibus_cyc (ibus_cyc),
       .i_ibus_rdt (lfsr[31:0]),

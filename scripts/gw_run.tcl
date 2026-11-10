@@ -32,6 +32,14 @@ puts "set_option -place_option $place_opt -route_option $route_opt"
 set_option -place_option $place_opt
 set_option -route_option $route_opt
 
+# Extra options as "-name value" pairs, e.g. GW_OPTIONS="-use_mspi_as_gpio 1".
+if {[info exists ::env(GW_OPTIONS)]} {
+    foreach {name value} $::env(GW_OPTIONS) {
+        puts "set_option $name $value"
+        set_option $name $value
+    }
+}
+
 switch -- $stage {
     syn { run syn }
     pnr { run pnr }

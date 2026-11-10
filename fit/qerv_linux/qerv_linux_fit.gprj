@@ -24,6 +24,7 @@
         <File path="../../external/serv/rtl/serv_rf_top.v" type="file.verilog" enable="1"/>
         <File path="../../external/mdu/rtl/mdu_top.v" type="file.verilog" enable="1"/>
         <File path="../../rtl/qerv/amo_unit.v" type="file.verilog" enable="1"/>
+        <File path="../../rtl/qerv/sv32_mmu.v" type="file.verilog" enable="1"/>
         <File path="../../rtl/qerv/qerv_cpu.v" type="file.verilog" enable="1"/>
         <File path="qerv_linux_fit_top.v" type="file.verilog" enable="1"/>
         <File path="../common/probe.cst" type="file.cst" enable="1"/>

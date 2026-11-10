@@ -6,3 +6,8 @@ sw/bootrom/build/
 sim/soc/results/*.fetch
 *.gprj.user
 sim/soc/results/*.break.txt
+fpga/impl/
+fpga/build/
+fpga/probe/build/
+sim/soc/results/*.rom_test.log
+__pycache__/
