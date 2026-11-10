@@ -1,0 +1,15 @@
+[submodule "external/kianRiscV"]
+	path = external/kianRiscV
+	url = https://github.com/splinedrive/kianRiscV.git
+[submodule "external/serv"]
+	path = external/serv
+	url = https://github.com/olofk/serv.git
+[submodule "external/mdu"]
+	path = external/mdu
+	url = https://github.com/zeeshanrafique23/mdu.git
+[submodule "external/mini-rv32ima"]
+	path = external/mini-rv32ima
+	url = https://github.com/cnlohr/mini-rv32ima.git
+[submodule "external/riscv-tests"]
+	path = external/riscv-tests
+	url = https://github.com/riscv-software-src/riscv-tests.git

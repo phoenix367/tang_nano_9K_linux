@@ -1,0 +1,114 @@
+
+QERV boot ROM
+flash image: copying......................................... done
+[    0.000000] Linux version 6.18.7 (ivan@ivan-G5-5587) (riscv32-buildroot-linux-uclibc-gcc.br_real (Buildroot 2026.08.1) 15.3.0, GNU ld (GNU Binutils) 2.45.1) #11 Tue Nov 10 03:33:32 +04 2026
+[    0.000000] Machine model: Tang Nano 9K QERV
+[    0.000000] earlycon: uart8250 at MMIO 0x10000000 (options '1000000')
+[    0.000000] printk: legacy bootconsole [uart8250] enabled
+[    0.000000] OF: reserved mem: Reserved memory: No reserved-memory node in the DT
+[    0.000000] Zone ranges:
+[    0.000000]   Normal   [mem 0x0000000080000000-0x00000000807fffff]
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000080000000-0x00000000807fffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000080000000-0x00000000807fffff]
+[    0.000000] riscv: base ISA extensions aim
+[    0.000000] riscv: ELF capabilities aim
+[    0.000000] Ticket spinlock: enabled
+[    0.000000] Kernel command line: earlycon=uart8250,mmio,0x10000000,1000000 console=ttyS0
+[    0.000000] printk: log buffer data + meta data: 4096 + 12800 = 16896 bytes
+[    0.000000] Dentry cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.000000] Built 1 zonelists, mobility grouping off.  Total pages: 2048
+[    0.000000] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+[    0.000000] SLUB: HWalign=64, Order=0-1, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] riscv-intc: 32 local interrupts mapped
+[    0.000000] clint: clint@11000000: timer running at 1000000 Hz
+[    0.000000] clocksource: clint_clocksource: mask: 0xffffffffffffffff max_cycles: 0x1d854df40, max_idle_ns: 3526361616960 ns
+[    0.000405] sched_clock: 64 bits at 1000kHz, resolution 1000ns, wraps every 2199023255500ns
+[    0.031168] Calibrating delay loop (skipped), value calculated using timer frequency.. 2.00 BogoMIPS (lpj=10000)
+[    0.049854] pid_max: default: 4096 minimum: 301
+[    0.084436] Mount-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.101452] Mountpoint-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.729320] Memory: 5192K/8192K available (1575K kernel code, 87K rwdata, 159K rodata, 816K init, 36K bss, 2800K reserved, 0K cma-reserved)
+[    0.866235] devtmpfs: initialized
+[    1.398856] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604462750000 ns
+[    1.428045] posixtimers hash table entries: 512 (order: 0, 2048 bytes, linear)
+[    1.447565] futex hash table entries: 16 (256 bytes on 1 NUMA nodes, total 0 KiB, linear).
+[    2.349394] clocksource: Switched to clocksource clint_clocksource
+[    3.416034] workingset: timestamp_bits=30 max_order=11 bucket_order=0
+[   56.561672] Serial: 8250/16550 driver, 1 ports, IRQ sharing disabled
+[   56.917878] of_serial 10000000.serial: error -ENXIO: IRQ index 0 not found
+[   57.126114] printk: legacy console [ttyS0] disabled
+[   57.367669] 10000000.serial: ttyS0 at MMIO 0x10000000 (irq = 0, base_baud = 1000000) is a 16550A
+[   57.407435] printk: legacy console [ttyS0] enabled
+[   57.407435] printk: legacy console [ttyS0] enabled
+[   57.441854] printk: legacy bootconsole [uart8250] disabled
+[   57.441854] printk: legacy bootconsole [uart8250] disabled
+[   58.903231] clk: Disabling unused clocks
+[   59.686302] Freeing unused kernel image (initmem) memory: 816K
+[   59.704403] This architecture does not have kernel memory protection.
+[   59.723366] Run /init as init process
+~ # free
+              total        used        free      shared  buff/cache   available
+Mem:           6208        2324        2392           0        1492        1944
+~ # cat /proc/meminfo
+MemTotal:           6208 kB
+MemFree:            1848 kB
+MemAvailable:       1412 kB
+Buffers:               0 kB
+Cached:             1492 kB
+SwapCached:            0 kB
+Active:                0 kB
+Inactive:              0 kB
+Active(anon):          0 kB
+Inactive(anon):        0 kB
+Active(file):          0 kB
+Inactive(file):        0 kB
+Unevictable:        1488 kB
+Mlocked:               0 kB
+MmapCopy:           1412 kB
+SwapTotal:             0 kB
+SwapFree:              0 kB
+Dirty:                 0 kB
+Writeback:             0 kB
+AnonPages:             0 kB
+Mapped:                0 kB
+Shmem:                 0 kB
+KReclaimable:          0 kB
+Slab:               1244 kB
+SReclaimable:          0 kB
+SUnreclaim:         1244 kB
+KernelStack:         128 kB
+PageTables:            0 kB
+SecPageTables:         0 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:        3104 kB
+Committed_AS:          0 kB
+VmallocTotal:          0 kB
+VmallocUsed:           0 kB
+VmallocChunk:          0 kB
+Percpu:               32 kB
+Balloon:               0 kB
+~ # ps
+  PID USER       VSZ STAT COMMAND
+    1 root       468 S    init
+    2 root         0 SW   [kthreadd]
+    3 root         0 SW   [pool_workqueue_]
+    4 root         0 IW   [kworker/0:0-eve]
+    5 root         0 IW<  [kworker/0:0H]
+    6 root         0 IW   [kworker/0:1]
+    7 root         0 IW   [kworker/u4:0-ev]
+    8 root         0 IW<  [kworker/R-mm_pe]
+    9 root         0 SW   [ksoftirqd/0]
+   10 root         0 SW   [kdevtmpfs]
+   11 root         0 IW<  [kworker/R-write]
+   12 root         0 SW   [kswapd0]
+   13 root         0 IW   [kworker/u4:1]
+   14 root         0 IW   [kworker/u4:2]
+   19 root       484 S    -/bin/sh
+   21 root       476 R    ps
+~ # 

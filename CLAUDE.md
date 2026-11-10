@@ -1,0 +1,363 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project status and goal
+
+Experimental, greenfield: bring up a Linux kernel on a **Tang Nano 9K** by putting a RISC-V
+soft core into the FPGA with the on-package PSRAM as main memory. No SoC RTL or core choice
+yet; so far there are only fit probes and the perf model (below). The chosen direction is
+QERV extended for no-MMU M-mode Linux. Its milestones (M0 software image in the emulator →
+M1 core → M2 SoC sim → M3 fit → M4 board), memory map and open decisions are in
+`doc/stage1_plan.md`. Update this file as decisions land. Don't describe planned structure as
+if it exists.
+
+## Build commands
+
+- `scripts/gw_run.sh` (+ `gw_run.tcl`, copied unchanged from the ov7670 project) runs `gw_sh`
+  headlessly. Env: `GOWIN_PATH`, `GPRJ`, `STAGE=syn|pnr|all`, `TOP`, optional
+  `PLACE_OPTION`/`ROUTE_OPTION`. A full synth + PnR of a fit probe takes 1–2 min.
+- **Fit probes** (`fit/<probe>/`) measure one CPU core alone on the GW1NR-9:
+  - **Wrapper:** an LFSR drives the CPU's inputs and every output is XOR-folded onto one LED,
+    so nothing is pruned and the design still goes through PnR. This adds ~100 LUTs and ~70 FFs.
+  - **Running:** `fit/run_probe.sh <probe> [label]` builds `fit/<probe>/<probe>_fit.gprj`
+    (top `<probe>_fit_top`), copies the reports to `fit/<probe>/results/<label>/`, and prints
+    a summary row. `python3 fit/summarize.py fit/*/results/*` reprints all rows.
+  - **Build options:** each probe's options live in a generated `<x>_cfg.v` listed first in its
+    `.gprj`, and GowinSyn carries those macros into the later files. Probes with variants have
+    a `run_fit.sh` that rewrites the cfg and sets the label:
+    - `fit/kianv_sv32/run_fit.sh [ITLB] [DTLB]`: ITLB is 4-way and DTLB 8-way, so entries
+      must be multiples of that.
+    - `fit/qerv/run_fit.sh [1|4]`: SERV width.
+  - **Constraints:** pins and the 50 MHz analysis clock are shared in `fit/common/`.
+- **Linux image (M0):** `sw/build.sh [buildroot-target]` builds the stage-1 software.
+  - **Inputs:** Buildroot is pinned to 2026.08.1 and checked out in
+    `/mnt/data/build/tang9k_linux/buildroot`. The external tree `sw/br2-external`
+    (`configs/tang9k_nommu_defconfig`, `board/tang9k/`) holds `linux.config`, `tang9k.dts`,
+    `busybox.config` and the rootfs overlay.
+  - **What gets built:** an rv32ima/ilp32 uClibc-ng toolchain with elf2flt, kernel 6.18.7
+    with the initramfs linked in, and the DTB.
+  - **Outputs:** the build tree is `/mnt/data/build/tang9k_linux/br-tang9k`. `Image` and
+    `tang9k.dtb` are copied to `/mnt/data/build/tang9k_linux/images-tang9k/`.
+  - **Timing:** the first build is ~40 min. Kernel/busybox-only rebuilds take minutes, e.g.
+    `sw/build.sh linux-rebuild all`.
+  - **Defconfig:** re-applied on every run, so edit the files in the repo, not
+    `.config`/menuconfig.
+  - **Gotcha:** Buildroot's RISC-V arch never selects `BR2_SOFT_FLOAT`, so uClibc-ng gets
+    `UCLIBC_HAS_FENV` and fails on `frrm`. `sw/br2-external/Config.in` selects it for F-less
+    RISC-V.
+  - **Booting the result:** `perf/boot_trace/run.sh` traces this image by default.
+- GowinSyn `NL0002 ... is swept in optimizing` on small combinational modules means the module
+  was absorbed into its parent, not deleted. The hardware-proven ov7670 build shows it for
+  `servile_mux`.
+- The installed yosys (0.33) does not map `*` to Gowin DSPs, so its `synth_gowin` numbers
+  for KianV are wildly inflated. Use GowinSyn for any utilization figure.
+- **QERV SoC (M2):** `rtl/soc/soc_top.v` contains:
+  - qerv_cpu → servile_arbiter → an address decoder (memory map in `doc/stage1_plan.md`, the
+    same as the emulator)
+  - `l1_cache.v`: 16 KB unified, direct-mapped, write-back, in front of the Gowin PSRAM IP user
+    interface
+  - `uart_16550.v` (polled, 16-byte FIFOs), `clint.v`, `syscon.v`
+  - `spi_flash_xip.v`: read-only flash window at `0x2000_0000`
+  - `bootrom.v`, holding `sw/bootrom/bootrom.S`
+
+  It is one clock domain, the PSRAM IP's user clock.
+  - **Boot ROM:** copies Image + DTB from flash (layout from `sw/mkflash.py`: header `QRVL`,
+    DTB @0x1000, Image @0x2000) to `0x80000000` / `0x807FF000`, or uses preloaded RAM. It then
+    enters the kernel with a0=0, a1=DTB.
+  - **Full-boot simulation:** `sim/soc/run.sh` (Verilator; env `INPUT`, `FLASH=1`, `W`,
+    `MAX_CYCLES`, `QUIET=1`). It runs ~2.4 MHz, so a full boot takes ~8 min. The console goes
+    to `sim/soc/results/`.
+  - **PSRAM model:** `rtl/sim/psram_ui_model.v` was matched edge-for-edge to the real IP
+    gate-level netlist (`verif/psram/run.sh`, `--ip` for the ~15 min netlist run; details in
+    `verif/psram/NOTES.md`):
+    - **Timing:** read latency is 16 clk_out (hardware may see 15–17 depending on calibration,
+      so always use rd_data_valid). Write beat 0 comes with cmd_en.
+    - **Mask:** data_mask=1 means the byte is not written.
+    - **Spacing:** TCMD is 19. 18 still works; ≤17 silently corrupts data, with no IP error.
+    - **Bursts** wrap inside their 32-byte group.
+    - **Loader:** `+psram_load0/1 +psram_addr0/1` take byte addresses.
+  - **PSRAM IP on hardware (for M3):**
+    - Its `clk` input must be the free-running 27 MHz reference, and `pll_lock` must be high.
+    - init_calib rises ~15.6 ms after reset.
+    - memory_clk = 2 × clk_out is fixed; the GUI accepts 50–250 MHz.
+    - The IP's fixed ~3.2 ns CK shift is a quarter period near 78 MHz, so aim for memory_clk
+      ≈ 80 MHz (CPU on clk_out at 40 MHz) rather than 54 MHz.
+    - The IP must be regenerated in the Gowin GUI; headless gw_sh can't do it for this IP.
+    - The 135 MHz netlist also passed the IP-vs-model compare at memory_clk 54 and 100 MHz in
+      simulation. At read delays of 9.2/12.9 ns the read latency shifts (model mismatch),
+      which the rd_data_valid-driven cache tolerates.
+  - **RTL boot results (2026-11-10, 27 MHz):**
+    - `~ #` after 1.88G cycles = 69.5 s (80.3M instructions, CPI 23.4); flash copy +4.7 s.
+    - About 4.5× more timer ticks than the emulator model, so tick/sched/timekeeping work is
+      ~14% of instructions.
+  - **Unit tests:** `verif/cache/tb_cache.v` is random traffic with an 8-line cache (Icarus,
+    ~45 s). `verif/spi_flash/tb_spi_flash.v` covers the flash reader.
+  - **UART in polled mode:** IIR must report pending RX/THRE sources (gated by IER) even
+    without an IRQ line. The 8250 driver's poll timer calls the IRQ handler, which returns
+    at once on "no interrupt". With IIR stuck at 0x01, TX still works through the driver's
+    THRE-bug backup timer, but RX is never read.
+  - **Debugging a boot:** `BREAK_PC=<hex> sim/soc/run.sh` stops at a PC and dumps the last
+    20k fetches with MIE/MPIE/mode/irq/mtip to `sim/soc/results/soc_w<W>.break.txt`.
+    Resolve the PCs with the kernel's `System.map`.
+  - **Verilator gotchas:**
+    - A comment that starts with "Verilator" is parsed as a directive.
+    - `commandArgsPlusMatch` returns "" (not NULL) when a plusarg is absent.
+- **QERV-Linux CPU (M1):** `rtl/qerv/qerv_cpu.v` = SERV `LINUX=1` + MDU + `rtl/qerv/amo_unit.v`.
+  - `verif/qerv/run_riscv_tests.sh` runs riscv-tests rv32ui/um/ua, p env, in U-mode via `mret`.
+    It runs at W=4 and W=1 in ~50 s (env `WIDTHS`, `SUITES`). `ma_data` is skipped because
+    SERV traps misaligned accesses, which Linux emulates.
+  - `verif/qerv/run_directed.sh` runs `verif/qerv/tests/*.S` self-checking and in lockstep
+    with `verif/qerv/iss.py`. `iss.py` is the reference model of the LINUX core: CSRs,
+    U-mode, traps, timer IRQ via a TB-written mtip, LR/SC/AMO.
+  - Both use `verif/qerv/tb/qerv_tb.v`: qerv_cpu → servile_arbiter → servant_ram. A store to
+    `0x8000FFF8` drives mtip; a store to `0x8000FFFC` halts (0 = pass); `+tohost=<hex>` serves
+    the riscv-tests.
+  - Link test programs with `-Wl,--build-id=none`. Otherwise the build-id note lands at
+    `0x80000000`, SERV executes it, and it hangs (no illegal-instruction trap).
+  - `fit/qerv_linux/run_fit.sh [4|1]` is the fit probe for qerv_cpu.
+- **Boot-time model** (`perf/`), three pieces:
+  - `perf/serv_cpi/run.sh` (~90 s) measures cycles per instruction class on SERV/QERV + MDU
+    in Icarus. It checks the RTL against a Python ISS (`iss.py`) and writes
+    `perf/serv_cpi/results.json`.
+  - `perf/boot_trace/run.sh` boots our `images-tang9k/Image` + DTB at 8 MB by default
+    (`STOCK=1` for cnlohr's prebuilt images; env `RAM_MB`, `US`, `TRACE=1` for a PC trace).
+    It runs `boot_trace.c`, which is mini-rv32ima's core with hooks:
+    - instruction classes and shift-amount histograms
+    - split I/D and unified cache simulation
+    - UART milestones
+    - `-b` DTB and `-T` PC trace
+
+    The CPU state lives outside guest RAM. Results go to `perf/boot_trace/results/`.
+  - `python3 perf/estimate_boot.py <trace.json>... [--mhz] [--t0-ns] [--icache/--dcache
+    size:line:ways | --ucache size:line:ways] [--wait]` combines the two.
+  - **Running the trace:** auto-mode blocks Claude from building or running the downloaded
+    emulator/images, so the user runs `perf/boot_trace/run.sh` themselves (via `!`).
+
+## Fit results (GowinSyn 1.9.12.02 SP2, 2026-11-10, core only, no caches/peripherals)
+
+Multipliers use one DSP `MULT36X36` in every row. "Logic" counts each RAM16 as 6 LUTs.
+
+| Core | Logic (of 8,640) | CLS | FF | BSRAM | Fmax |
+| --- | --- | --- | --- | --- | --- |
+| KianV SV32, TLB 64/64 (upstream) | 7,712 (90%) | 93% | 2,424 | 2 | 11.8 MHz |
+| KianV SV32, TLB 16/16 | 6,775 (79%) | 86% | 2,112 | 2 | 17.2 MHz |
+| KianV no-MMU (uLinux core) | 3,812 (45%) | 56% | 1,165 | 1 | 23.4 MHz |
+| QERV (SERV W=4) + MDU + CSR | 953 (12%) | 16% | 541 | 1 (RF) | 50.4 MHz |
+| SERV W=1 + MDU + CSR | 821 (10%) | 15% | 505 | 1 (RF) | 61.7 MHz |
+| **QERV-Linux (qerv_cpu, W=4)** | 1,313 (16%) | 22% | 644 | 1 (RF) | 50.9 MHz |
+| QERV-Linux (qerv_cpu, W=1) | 1,223 (15%) | 21% | 610 | 1 (RF) | 51.7 MHz |
+
+- **KianV SV32:** the critical path is MMU address → DTLB lookup/LRU update (35–38 logic
+  levels). As-is it leaves too little room for caches, the PSRAM controller and peripherals.
+- **KianV no-MMU:** fits, but at 24 logic levels it misses the 27 MHz crystal.
+- **SERV/QERV:** the MDU is the `external/mdu` core (DSP multiply + serial divide).
+- **QERV-Linux:** `LINUX=1` costs about +360 logic over plain QERV, about 130 of it ALUs (the
+  AMO unit's adder and comparators). The AMO write data is registered in the unit's GAP
+  cycle; with it combinational, Fmax was 44 MHz. The next-worst path is SERV's rd mux, where
+  the readable mie/mip add a level.
+- **Atomic cycle costs (W=4 / W=1):** AMO 26/74, LR 23/71, SC 22–23/70–71. Plain lw/sw are
+  22/70.
+
+## Boot-time estimate (2026-11-10)
+
+**SERV/QERV cycles per instruction** (`perf/serv_cpi`): fixed per instruction, measured with
+servant_ram's 1-cycle ack. Format is W=1 / W=4.
+
+| Class | Cycles |
+| --- | --- |
+| ALU, lui/auipc, CSR, ecall/mret | 36 / 12 |
+| slt*, branches (taken or not), jal/jalr, left shifts | 68 / 20 |
+| Right shifts | 68+s / 20+⌊s/4⌋ |
+| Loads/stores | 70 / 22 |
+| mul* | 71 / 23 |
+| div/rem (fixed time) | 103 / 55 |
+
+Each extra wait state adds 1 cycle per bus transaction.
+
+**Boot traces** (`perf/boot_trace`, cnlohr images, 8 MB vs 16 MB):
+- **In 8 MB, neither stock image reaches a usable shell.**
+  - The kernel and initramfs reserve ~3.6 MB, and the initramfs files stay pinned in RAM.
+  - binfmt_flat needs one contiguous power-of-two block for each program. busybox needs
+    552–712 KB, so an order-8 (1 MB) block.
+  - 6.1: init fails. 6.8: init starts, but every later exec fails.
+  - On RISC-V a FLAT binary's text can't be shared or run in place (pc-relative GOT access ties
+    text to data), so every process holds a full copy. The real system needs small binaries and
+    few processes.
+- **In 16 MB:**
+  - 6.8-rc1 reaches the root shell in 35.2M instructions (24.4M to "Run /init").
+  - 6.1.14 reaches the login prompt in 46.8M (29.0M to "Run /init").
+  - Userspace is under 1M of it. The rest is the kernel: initramfs unpacking, page zeroing,
+    and copying/relocating flat binaries on exec.
+- **Mix:** ~40% loads/stores, then addi. Atomics are 0.17% (~59k LR/SC/AMO), and there are
+  ~12k fences.
+- **Caches:** 8 KB direct-mapped with 32 B lines miss ~5% of fetches and ~8% of data
+  accesses.
+
+**Estimate** (8 KB/32 B direct-mapped I$ and D$, 1 hit wait state, PSRAM fill
+200–450 ns + line/270 MB/s, 6.8 image to shell):
+
+| Core | 27 MHz | 50 MHz |
+| --- | --- | --- |
+| QERV (W=4) | ~27–28 s | ~15–16 s |
+| SERV (W=1) | ~79–80 s | ~43–44 s |
+
+QERV runs at about 0.44 µs/instruction at 50 MHz. Cache misses add only 1–2 s, so CPI
+dominates. The trace's time base was 0.3 µs/instr; rerun with `US=0.45` to match QERV
+exactly.
+
+**Our image (M0, `sw/build.sh`, 2026-11-10) boots to `~ #` in 8 MB in the emulator:**
+- **Instructions:**
+  - 51.4M in total: 45.6M kernel to "Run /init", then 5.8M for init and the shell.
+  - Each later command costs about 1M instructions, mostly the kernel copying busybox for
+    exec.
+- **Kernel:** `Memory: 5192K/8192K available` (1577K code, 83K rwdata, 159K rodata, 36K bss;
+  the 818K init section is freed). Kernel 6.18.7; RELOCATABLE off via `PHYS_RAM_BASE_FIXED`;
+  `LOG_BUF_SHIFT=12`.
+- **After boot:** `free` shows 6208K total, 2408K free and 1960K available.
+- **Fragmentation:** `/proc/buddyinfo` has one free order-7 (512 KB) block and none larger. So
+  one more busybox process (458 KB in RAM, needs an order-7 block) fits next to init and the
+  shell, which `ps` confirmed. A two-command pipeline of non-NOFORK applets would not fit.
+- **Boot-time estimate:** QERV ~23 s at 50 MHz, ~41 s at 27 MHz. A unified 16 KB/32 B cache is
+  equal to split 8+8 KB.
+- **Profile (`PROFILE=1`, `perf/boot_trace/profile.py`):** spread out, no single hotspot:
+  - memcpy/memset ~15%
+  - 64-bit division ~5%
+  - scheduler load tracking ~6%
+  - printk formatting ~5%
+  - slab/kernfs/idr bookkeeping
+  The kernel takes ~2× the instructions of cnlohr's 6.8 image to reach init. That is the next
+  boot-time lead.
+
+**SERV quirks that matter for Linux.** The first three were found by `perf/serv_cpi`; all are
+fixed under `LINUX=1`.
+- `wfi` is decoded as `ebreak` and traps (mcause 3).
+- `fence`/`fence.tso`/`fence.i` are decoded as loads that don't write rd. They do a real
+  byte/halfword read at an address made from the immediate bits; some of those addresses
+  have bit 31 set (I/O region).
+- `mie` is not readable, so `csrs`/`csrc mie` write MTIE back as 0.
+- A timer interrupt that lands on an `ecall` reports mcause `0x8000000F` instead of 7. Bit 3
+  is taken from the decoded ecall. Found by the M1 directed test 13; it is an upstream bug.
+- An interrupt that lands on a CSR instruction touching mstatus or mie still performs that
+  write during the trap cycle. For example, an interrupt on `csrr a5, mstatus` clears MIE
+  before the trap saves it into MPIE, so `mret` returns with interrupts off. Linux hit this
+  in `do_idle`: `WARN_ON_ONCE(irqs_disabled())`, found with `BREAK_PC` in the SoC sim. It is
+  an upstream bug, fixed by `csr_wr_ok` in `serv_csr.v` and covered by directed test 17.
+- `mdu_top` doesn't reset `div_ready`/`mul_en`/`mul_done`. That's harmless on the FPGA, but
+  4-state simulation needs them initialized.
+
+## Target hardware: the constraints that drive every design decision
+
+- FPGA: Gowin **GW1NR-LV9QN88PC6/I5** (GW1NR-9, device version C). **8,640 LUT4, 6,480 FF,
+  26 BSRAM (468 Kbit ≈ 58 KB)**, 20 DSP multipliers, 2 rPLLs. LUTs are the binding resource.
+- Main memory: **64 Mbit = 8 MB on-package PSRAM** (HyperRAM-style, 2 × 32 Mbit dies). It is
+  **not 32 MB**. Measured: a stock no-MMU kernel + busybox initramfs does not fit (see
+  Boot-time estimate). Plan on small binaries and few processes.
+- Boot storage: 32 Mbit (4 MB) external SPI flash, which also holds the bitstream. A microSD slot
+  is on the board.
+- Clock: 27 MHz crystal on pin 52. Button/reset on pin 4. LEDs on pins 10, 11, 13, 14, 15, 16
+  (active-low, 1.8 V bank). Console UART: TX 17 / RX 18 (3.3 V), reachable through the
+  on-board USB-JTAG/UART bridge.
+- PSRAM is reached only through Gowin's `psram_memory_interface_hs_2ch` IP. Its pins come from
+  the IP, not from the user `.cst`. The 2-channel variant exposes the two dies as separate
+  4 MB channels. Linux wants one contiguous region, so either regenerate the IP in a
+  single-channel mode or address-decode the two channels behind one bus slave. PSRAM latency is
+  high, so the CPU needs a cache in BSRAM.
+
+## Prior art for Linux at this memory size (checked 2026-11)
+
+- **KianV**: vendored as the git submodule `external/kianRiscV` (splinedrive/kianRiscV). Run
+  `git submodule update --init` after cloning. Its RV32IMA SoCs boot Linux, and the Tiny Tapeout
+  edition does it with **8 MiB of PSRAM** at ~30 MHz, the closest match to this board's memory
+  budget. Several directories under `linux_socs/` are symlinks to the same two trees:
+  - `kianv_harris_mcycle_edition/` (= `uLinuxSoC`, `linux_nommu_...`): **no-MMU** multicycle
+    core with no cache. RTL targets ULX3S / iCESugar-Pro. Its Tang Nano 20K port (8 MB SDRAM)
+    is **binary-only** (`demo/tangNano20K/`), so there is no Gowin RTL to start from.
+  - `kianv_mc_rv32ima_sv32/` (= `LinuxSoC`, `rv32ima_sv32_zicntr_sstc`): **SV32 MMU** core
+    with I/D caches, CLINT, PLIC and SPI NOR boot. Board files live in `engineering/boards/`;
+    all are ECP5, Cyclone or Artix, none are Gowin.
+  - `LinuxSoC_v2/`: a slimmer rework of the SV32 SoC. Its CPU was split out upstream as
+    splinedrive/kianv-rv32-linuxcore.
+
+  All variants talk to SDRAM or QSPI PSRAM, so porting means replacing the memory controller
+  with the Gowin PSRAM IP and adding a `.cst` and top level for the 9K. Don't edit the
+  submodule in place; keep 9K-specific RTL in this repo.
+- **linux-on-litex-vexriscv**: VexRiscv with MMU on LiteX. It needs 32 MB, or 8 MB when the
+  rootfs is on SD. It supports the Tang Nano 20K, not the 9K. litex-boards has a
+  `sipeed_tang_nano_9k` target, but its HyperRAM support is not mainline-clean.
+- **SERV** (olofk/serv, submodule `external/serv`; its M-extension unit is `external/mdu`,
+  zeeshanrafique23/mdu). Bit-serial, already proven on this chip in the ov7670 reference.
+  Upstream also has a `tangnano9k` servant target (`servant.core`). Today it has:
+  - RV32I; M via the external MDU (`MDU=1`); optional C; `W=1` or `W=4` (QERV, NEWS 1.4.0).
+  - M-mode only, with mstatus MIE/MPIE, mie.MTIE, mcause, and mtvec/mscratch/mepc/mtval kept
+    in the register-file RAM.
+  - The timer IRQ only.
+
+  It lacks A, an external IRQ, illegal-instruction traps and S/U modes. CSR addresses are only
+  partly decoded (`serv_decode.v`), so e.g. `mhartid` aliases another CSR. It can't run
+  Linux as-is.
+
+  **Our fork:** `external/serv` is on the local branch `qerv-linux`, not yet pushed; it moves
+  to a GitHub fork once the user creates one. It adds `parameter LINUX`, and `LINUX=0` is
+  cycle-identical to upstream (`perf/serv_cpi` results unchanged). `LINUX=1` adds:
+  - A: one dbus transaction with `o_dbus_amo`/`o_dbus_amo_op`, executed by `amo_unit`.
+  - U-mode, with mstatus MPP (00/11) and MPIE readable and writable.
+  - Readable mie and mip.
+  - Exact 12-bit CSR decode: unknown CSRs read 0 and ignore writes.
+  - fence/fence.i/wfi as no-ops, and the mcause fix.
+
+  The changed files are `serv_decode.v`, `serv_csr.v`, `serv_top.v` and `serv_rf_top.v`.
+  Still absent: illegal-instruction traps, external IRQ, S-mode and MMU (stage 2).
+
+Linux requires at least RV32IMA. For a normal kernel it also needs an SV32 MMU and
+S-mode/M-mode, with OpenSBI or an equivalent M-mode shim. A no-MMU kernel saves logic but
+limits userspace.
+
+## Reference projects (read these instead of re-deriving)
+
+- `~/projects/tang_nano_9K_ov7670`: the **same board**. Reuse from it:
+  - The headless Gowin flow, `scripts/gw_run.sh` + `scripts/gw_run.tcl` (env: `GOWIN_PATH`,
+    `GPRJ`, `STAGE=syn|pnr|all`, optional `TOP`, `PLACE_OPTION`, `ROUTE_OPTION`).
+  - The working PSRAM IP setup at 135 MHz `memory_clk` / 67.5 MHz `fb_clk`, including its SDC
+    handling. Three hold violations inside the IP's `u_psram_init` are known and can't be
+    cleared from user constraints.
+  - The `.cst` pin conventions, and `serv_soc/` as a minimal standalone CPU project with
+    BSRAM preloaded from `$readmemh`.
+  - The CMake + Icarus/ctest simulation infra in `sim/`, including the behavioural
+    `sim/common/psram_model.sv`.
+  - The `hw-check` skill's `parse_timing.py` for detailed PnR timing (worst paths, TNS).
+- `~/projects/mega_138K_test`: a **working Linux bring-up** on a Gowin FPGA (AE350 RV32 on the
+  Tang Mega 138K). Reuse its boot-stack approach: OpenSBI, U-Boot and kernel forks as
+  submodules, `scripts/build_kernel.sh` with release numbering in `linux/RELEASE`, a
+  per-package `scripts/rootfs/build_<pkg>.sh` recipe for every userspace binary, and a
+  `boardtest` harness. Its hardware (hard SoC, 1 GB DDR3, FPU) is far larger, so don't copy its
+  kernel config or DT sizes.
+
+## Tools on this machine
+
+- Gowin EDA: `/mnt/data/Gowin_V1.9.12.02_SP2_linux` (contains `IDE/` and `Programmer/`). If
+  `gw_sh` fails with `License verification failed Server not responding`, retry once.
+- Programming: `programmer_cli --run 2` loads SRAM (volatile); `--run 6` writes embedded flash
+  (persistent). `openFPGALoader` is also installed.
+- Simulation and lint: `iverilog`, `verilator`, `yosys` (in `/usr/bin`).
+- RISC-V toolchains:
+  - Bare-metal `riscv64-unknown-elf-gcc` under `/mnt/data/xilinx/2025.2/Vitis/gnu/riscv/lin/bin`.
+  - Andes `nds32le-linux-glibc-v5d` (`riscv32-linux-`) under `/mnt/data/toolchains`.
+  - Bootlin `~/projects/riscv32-ilp32d--musl--stable-2025.08-1`.
+  - The Bootlin and Andes Linux toolchains target the **ilp32d (hard-float) ABI**. An FPU-less
+    soft core needs an **ilp32 soft-float** userspace toolchain, which doesn't exist here yet.
+    Build it (e.g. with buildroot) rather than reusing those two.
+- Scratch builds that need disk space go under `/mnt/data/build/`, because the root disk is
+  nearly full.
+
+## Conventions carried over from the reference projects
+
+- Generated Gowin IP (rPLL, PSRAM, BSRAM wrappers) is regenerated through the IDE IP wizard,
+  never hand-edited. Keep the `.ipc` next to the output.
+- Every new source must be registered in the `.gprj` `<FileList>`. If CMake owns the build,
+  register it in the CMake source lists too.
+- Every top-level port needs an `IO_LOC` in the `.cst` before PnR.
+- `impl/` is build output, not source.
+- Testbenches: when sampling a signal the DUT drives with a nonblocking assignment on
+  `@(posedge clk)`, insert `#2;` after the edge before sampling. Without it the testbench races
+  the NBA.

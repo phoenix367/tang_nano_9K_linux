@@ -1,0 +1,86 @@
+// Tang Nano 9K QERV SoC, stage 1. Memory map identical to cnlohr's mini-rv32ima so the same
+// kernel + DTB boot in perf/boot_trace (emulator) and on the board; see doc/stage1_plan.md.
+// The boot ROM / emulator load this DTB at the top of RAM and pass its address in a1; the
+// kernel reserves it.
+/dts-v1/;
+
+/ {
+	#address-cells = <2>;
+	#size-cells = <2>;
+	compatible = "tang9k,qerv-soc";
+	model = "Tang Nano 9K QERV";
+
+	chosen {
+		bootargs = "earlycon=uart8250,mmio,0x10000000,1000000 console=ttyS0";
+		stdout-path = &uart0;
+	};
+
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x0 0x80000000 0x0 0x800000>;	/* 8 MB PSRAM */
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		timebase-frequency = <1000000>;		/* CLINT mtime ticks at 1 MHz */
+
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			reg = <0>;
+			status = "okay";
+			compatible = "riscv";
+			riscv,isa = "rv32ima";
+			riscv,isa-base = "rv32i";
+			riscv,isa-extensions = "i", "m", "a", "zicsr", "zifencei";
+			mmu-type = "riscv,none";
+
+			cpu0_intc: interrupt-controller {
+				#interrupt-cells = <1>;
+				interrupt-controller;
+				compatible = "riscv,cpu-intc";
+			};
+		};
+	};
+
+	soc {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		compatible = "simple-bus";
+		ranges;
+
+		/* 16550 register subset, fixed baud (divisor latch ignored), polled: no IRQ. */
+		uart0: serial@10000000 {
+			compatible = "ns16550a";
+			reg = <0x0 0x10000000 0x0 0x100>;
+			clock-frequency = <16000000>;
+			current-speed = <1000000>;
+			no-loopback-test;
+		};
+
+		clint@11000000 {
+			compatible = "sifive,clint0", "riscv,clint0";
+			reg = <0x0 0x11000000 0x0 0x10000>;
+			interrupts-extended = <&cpu0_intc 3>, <&cpu0_intc 7>;
+		};
+
+		syscon: syscon@11100000 {
+			compatible = "syscon";
+			reg = <0x0 0x11100000 0x0 0x1000>;
+		};
+
+		poweroff {
+			compatible = "syscon-poweroff";
+			regmap = <&syscon>;
+			offset = <0x0>;
+			value = <0x5555>;
+		};
+
+		reboot {
+			compatible = "syscon-reboot";
+			regmap = <&syscon>;
+			offset = <0x0>;
+			value = <0x7777>;
+		};
+	};
+};

@@ -1,0 +1,8 @@
+fit/*/impl/
+perf/boot_trace/results/*.hist
+perf/boot_trace/results/*.pc
+verif/*/build/
+sw/bootrom/build/
+sim/soc/results/*.fetch
+*.gprj.user
+sim/soc/results/*.break.txt

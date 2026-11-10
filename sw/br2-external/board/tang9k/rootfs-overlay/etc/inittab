@@ -1,0 +1,6 @@
+# Minimal inittab for an 8 MB no-MMU system: no rcS daemons (each resident process holds its
+# own copy of the busybox flat binary), no getty/login, just a shell on the console.
+::sysinit:/bin/mount -t proc proc /proc
+::sysinit:/bin/mount -t sysfs sysfs /sys
+console::respawn:-/bin/sh
+::shutdown:/bin/umount -a -r

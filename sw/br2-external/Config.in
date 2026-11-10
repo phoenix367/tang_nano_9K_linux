@@ -1,0 +1,8 @@
+# Buildroot's RISC-V arch support never selects BR2_SOFT_FLOAT, even without F/D. uClibc-ng is
+# then configured with UCLIBC_HAS_FPU/UCLIBC_HAS_FENV and fails to assemble `frrm` in
+# libm/riscv32 for an rv32ima target. Mark F-less RISC-V targets soft-float; for RISC-V this
+# only changes the uClibc-ng config (gcc's --with-float is added for arm/mips/ppc/sparc only).
+config BR2_TANG9K_RISCV_SOFT_FLOAT
+	bool
+	default y if BR2_riscv && !BR2_RISCV_ISA_RVF
+	select BR2_SOFT_FLOAT

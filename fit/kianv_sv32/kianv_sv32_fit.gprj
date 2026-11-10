@@ -1,0 +1,42 @@
+<?xml version="1" encoding="UTF-8"?>
+<!DOCTYPE gowin-fpga-project>
+<Project>
+    <Template>FPGA</Template>
+    <Version>5</Version>
+    <Device name="GW1NR-9C" pn="GW1NR-LV9QN88PC6/I5">gw1nr9c-004</Device>
+    <FileList>
+        <File path="kianv_cfg.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/kianv_harris_mc_edition.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/control_unit.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/datapath_unit.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/register_file.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/design_elements.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/design_elements_fpgacpu_ca.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/alu.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/main_fsm.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/extend.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/alu_decoder.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/store_alignment.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/store_decoder.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/load_decoder.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/load_alignment.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/multiplier_extension_decoder.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/divider.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/multiplier.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/divider_decoder.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/multiplier_decoder.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/csr_exception_handler.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/csr_unit.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/interrupt_controller.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/csr_decoder.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/sv32.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/sv32_table_walk.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/sv32_translate_instruction_to_physical.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/sv32_translate_data_to_physical.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/associative_cache.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_mc_rv32ima_sv32/engineering/kianv_harris_edition/tag_ram.v" type="file.verilog" enable="1"/>
+        <File path="kianv_sv32_fit_top.v" type="file.verilog" enable="1"/>
+        <File path="../common/probe.cst" type="file.cst" enable="1"/>
+        <File path="../common/probe.sdc" type="file.sdc" enable="1"/>
+    </FileList>
+</Project>

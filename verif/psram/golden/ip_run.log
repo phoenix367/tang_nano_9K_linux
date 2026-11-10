@@ -1,0 +1,1753 @@
+tb_psram_ip: TCKD=2.00 ns, model RD_LATENCY=16 WR_BEAT0=0 CALIB=1055888
+          1110209000 ch1 CR0 <= 8f1f: latency 6,    fixed latency, legacy-wrap burst, burst length 32 bytes, drive 000
+          1110209000 ch0 CR0 <= 8f1f: latency 6,    fixed latency, legacy-wrap burst, burst length 32 bytes, drive 000
+          1110505000 ch1 CR1 <= 0040
+          1110505000 ch0 CR1 <= 0040
+
+==== init: rst_n released at 0.200 us (clk_out edge 1)
+  IP    init_calib0 at edge 1055889 (15644.692 us), +1055888 clk_out edges after rst_n
+  IP    init_calib1 at edge 1055889 (15644.692 us), +1055888 clk_out edges after rst_n
+  model init_calib0/1 at edges 1055889/1055889 (+1055888/+1055888)
+
+==== phase P1 write alignment / first read (T0+0, t=15644723000)
+         15644950000 ch1 CA=1ffc0020fff8 WRITE MEM WRAPPED hw_addr=000100
+         15644950000 ch0 CA=1ffc0020fff8 WRITE MEM WRAPPED hw_addr=000100
+         15645155000 ch1 CS# high after 60 CK edges (0 data edges)
+         15645155000 ch0 CS# high after 60 CK edges (0 data edges)
+         15645542000 ch1 CA=9ffc0020fff8  READ MEM WRAPPED hw_addr=000100
+         15645542000 ch0 CA=9ffc0020fff8  READ MEM WRAPPED hw_addr=000100
+         15645748000 ch1 CS# high after 60 CK edges (0 data edges)
+         15645748000 ch0 CS# high after 60 CK edges (0 data edges)
+  read ch0 addr=000100 issued@1055940: 8 beats, first@1055956 -> latency 16 (consecutive)
+    beat 0: 11945414 [id11 L2:id1/k0 L1:id1/k0 L0:id1/k0]
+    beat 1: 11955515 [id11 L2:id1/k1 L1:id1/k1 L0:id1/k1]
+    beat 2: 11965616 [id11 L2:id1/k2 L1:id1/k2 L0:id1/k2]
+    beat 3: 11975717 [id11 L2:id1/k3 L1:id1/k3 L0:id1/k3]
+    beat 4: 11985818 [id11 L2:id1/k4 L1:id1/k4 L0:id1/k4]
+    beat 5: 11995919 [id11 L2:id1/k5 L1:id1/k5 L0:id1/k5]
+    beat 6: 119a5a1a [id11 L2:id1/k6 L1:id1/k6 L0:id1/k6]
+    beat 7: 119b5b1b [id11 L2:id1/k7 L1:id1/k7 L0:id1/k7]
+  read ch1 addr=000100 issued@1055940: 8 beats, first@1055956 -> latency 16 (consecutive)
+    beat 0: 12a46424 [id12 L2:id2/k0 L1:id2/k0 L0:id2/k0]
+    beat 1: 12a56525 [id12 L2:id2/k1 L1:id2/k1 L0:id2/k1]
+    beat 2: 12a66626 [id12 L2:id2/k2 L1:id2/k2 L0:id2/k2]
+    beat 3: 12a76727 [id12 L2:id2/k3 L1:id2/k3 L0:id2/k3]
+    beat 4: 12a86828 [id12 L2:id2/k4 L1:id2/k4 L0:id2/k4]
+    beat 5: 12a96929 [id12 L2:id2/k5 L1:id2/k5 L0:id2/k5]
+    beat 6: 12aa6a2a [id12 L2:id2/k6 L1:id2/k6 L0:id2/k6]
+    beat 7: 12ab6b2b [id12 L2:id2/k7 L1:id2/k7 L0:id2/k7]
+  pin model ch0 halfwords 0x100..0x10f:
+    1194 5414 1195 5515 1196 5616 1197 5717 1198 5818 1199 5919 119a 5a1a 119b 5b1b
+
+==== phase P2 data_mask (T0+110, t=15646337000)
+         15646579000 ch0 CA=1ffc0040fff8 WRITE MEM WRAPPED hw_addr=000200
+         15646785000 ch0 CS# high after 60 CK edges (0 data edges)
+         15647172000 ch0 CA=1ffc0040fff8 WRITE MEM WRAPPED hw_addr=000200
+         15647378000 ch0 CS# high after 60 CK edges (0 data edges)
+         15647765000 ch0 CA=9ffc0040fff8  READ MEM WRAPPED hw_addr=000200
+         15647970000 ch0 CS# high after 60 CK edges (0 data edges)
+         15648357000 ch0 CA=1ffc0060fff8 WRITE MEM WRAPPED hw_addr=000300
+         15648563000 ch0 CS# high after 60 CK edges (0 data edges)
+         15648950000 ch0 CA=1ffc0060fff8 WRITE MEM WRAPPED hw_addr=000300
+         15649156000 ch0 CS# high after 60 CK edges (0 data edges)
+         15649543000 ch0 CA=9ffc0060fff8  READ MEM WRAPPED hw_addr=000300
+         15649748000 ch0 CS# high after 60 CK edges (0 data edges)
+         15650135000 ch0 CA=1ffc0080fff8 WRITE MEM WRAPPED hw_addr=000400
+         15650341000 ch0 CS# high after 60 CK edges (0 data edges)
+         15650728000 ch0 CA=1ffc0080fff8 WRITE MEM WRAPPED hw_addr=000400
+         15650933000 ch0 CS# high after 60 CK edges (0 data edges)
+         15651321000 ch0 CA=9ffc0080fff8  READ MEM WRAPPED hw_addr=000400
+         15651526000 ch0 CS# high after 60 CK edges (0 data edges)
+  mask pattern 1: m(k) = k+3; pattern 2: m(k) = 5k+7 (4 bits), k = edge offset vs cmd_en
+  read ch0 addr=000200 issued@1056090: 8 beats, first@1056106 -> latency 16 (consecutive)
+    beat 0: 22a45414 [id22 L2:id2/k0 L1:id1/k0 L0:id1/k0]
+    beat 1: 22956525 [id22 L2:id1/k1 L1:id2/k1 L0:id2/k1]
+    beat 2: 22966616 [id22 L2:id1/k2 L1:id2/k2 L0:id1/k2]
+    beat 3: 22975727 [id22 L2:id1/k3 L1:id1/k3 L0:id2/k3]
+    beat 4: 22985818 [id22 L2:id1/k4 L1:id1/k4 L0:id1/k4]
+    beat 5: 21a96929 [id21 L2:id2/k5 L1:id2/k5 L0:id2/k5]
+    beat 6: 21aa6a1a [id21 L2:id2/k6 L1:id2/k6 L0:id1/k6]
+    beat 7: 21ab5b2b [id21 L2:id2/k7 L1:id1/k7 L0:id2/k7]
+  read ch0 addr=000300 issued@1056210: 8 beats, first@1056226 -> latency 16 (consecutive)
+    beat 0: 32945414 [id32 L2:id1/k0 L1:id1/k0 L0:id1/k0]
+    beat 1: 31956525 [id31 L2:id1/k1 L1:id2/k1 L0:id2/k1]
+    beat 2: 32a66616 [id32 L2:id2/k2 L1:id2/k2 L0:id1/k2]
+    beat 3: 32975727 [id32 L2:id1/k3 L1:id1/k3 L0:id2/k3]
+    beat 4: 31a85818 [id31 L2:id2/k4 L1:id1/k4 L0:id1/k4]
+    beat 5: 32a96929 [id32 L2:id2/k5 L1:id2/k5 L0:id2/k5]
+    beat 6: 329a6a1a [id32 L2:id1/k6 L1:id2/k6 L0:id1/k6]
+    beat 7: 31ab5b2b [id31 L2:id2/k7 L1:id1/k7 L0:id2/k7]
+  read ch0 addr=000400 issued@1056330: 8 beats, first@1056346 -> latency 16 (consecutive)
+    beat 0: 41945414 [id41 L2:id1/k0 L1:id1/k0 L0:id1/k0]
+    beat 1: 41955515 [id41 L2:id1/k1 L1:id1/k1 L0:id1/k1]
+    beat 2: 41965616 [id41 L2:id1/k2 L1:id1/k2 L0:id1/k2]
+    beat 3: 41975717 [id41 L2:id1/k3 L1:id1/k3 L0:id1/k3]
+    beat 4: 41985818 [id41 L2:id1/k4 L1:id1/k4 L0:id1/k4]
+    beat 5: 41995919 [id41 L2:id1/k5 L1:id1/k5 L0:id1/k5]
+    beat 6: 419a5a1a [id41 L2:id1/k6 L1:id1/k6 L0:id1/k6]
+    beat 7: 419b5b1b [id41 L2:id1/k7 L1:id1/k7 L0:id1/k7]
+
+==== phase P3 read latency (T0+500, t=15652115000)
+         15652358000 ch1 CA=9ffc0020fff8  READ MEM WRAPPED hw_addr=000100
+         15652358000 ch0 CA=9ffc0020fff8  READ MEM WRAPPED hw_addr=000100
+         15652563000 ch1 CS# high after 60 CK edges (0 data edges)
+         15652563000 ch0 CS# high after 60 CK edges (0 data edges)
+         15652639000 ch0 CA=9ffc0022fff8  READ MEM WRAPPED hw_addr=000110
+         15652654000 ch1 CA=9ffc0022fff8  READ MEM WRAPPED hw_addr=000110
+         15652845000 ch0 CS# high after 60 CK edges (0 data edges)
+         15652860000 ch1 CS# high after 60 CK edges (0 data edges)
+         15652921000 ch0 CA=9ffc0024fff8  READ MEM WRAPPED hw_addr=000120
+         15652950000 ch1 CA=9ffc0024fff8  READ MEM WRAPPED hw_addr=000120
+         15653126000 ch0 CS# high after 60 CK edges (0 data edges)
+         15653156000 ch1 CS# high after 60 CK edges (0 data edges)
+         15653202000 ch0 CA=9ffc0026fff8  READ MEM WRAPPED hw_addr=000130
+         15653232000 ch1 CA=9ffc0026fff8  READ MEM WRAPPED hw_addr=000130
+         15653408000 ch0 CS# high after 60 CK edges (0 data edges)
+         15653437000 ch1 CS# high after 60 CK edges (0 data edges)
+         15654624000 ch0 CA=9ffc0028fff8  READ MEM WRAPPED hw_addr=000140
+         15654654000 ch1 CA=9ffc0028fff8  READ MEM WRAPPED hw_addr=000140
+         15654830000 ch0 CS# high after 60 CK edges (0 data edges)
+         15654860000 ch1 CS# high after 60 CK edges (0 data edges)
+         15656239000 ch0 CA=9ffc002afff8  READ MEM WRAPPED hw_addr=000150
+         15656269000 ch1 CA=9ffc002afff8  READ MEM WRAPPED hw_addr=000150
+         15656445000 ch0 CS# high after 60 CK edges (0 data edges)
+         15656475000 ch1 CS# high after 60 CK edges (0 data edges)
+  read ch0 issued@1056400 first@1056416 latency 16 beats 8     
+  read ch1 issued@1056400 first@1056416 latency 16 beats 8     
+  read ch0 issued@1056419 first@1056435 latency 16 beats 8     
+  read ch1 issued@1056420 first@1056436 latency 16 beats 8     
+  read ch0 issued@1056438 first@1056454 latency 16 beats 8     
+  read ch1 issued@1056440 first@1056456 latency 16 beats 8     
+  read ch0 issued@1056457 first@1056473 latency 16 beats 8     
+  read ch1 issued@1056459 first@1056475 latency 16 beats 8     
+  read ch0 issued@1056553 first@1056569 latency 16 beats 8     
+  read ch1 issued@1056555 first@1056571 latency 16 beats 8     
+  read ch0 issued@1056662 first@1056678 latency 16 beats 8     
+  read ch1 issued@1056664 first@1056680 latency 16 beats 8     
+  read latency (cmd_en edge -> first rd_data_valid edge): min 16 max 16
+
+==== phase P4 mapping (T0+834, t=15657064000)
+         15657306000 ch1 CA=1ffc0200fff8 WRITE MEM WRAPPED hw_addr=001000
+         15657306000 ch0 CA=1ffc0200fff8 WRITE MEM WRAPPED hw_addr=001000
+         15657512000 ch1 CS# high after 60 CK edges (0 data edges)
+         15657512000 ch0 CS# high after 60 CK edges (0 data edges)
+         15657588000 ch1 CA=1ffffffefff8 WRITE MEM WRAPPED hw_addr=1ffff0
+         15657588000 ch0 CA=1ffc0202fff8 WRITE MEM WRAPPED hw_addr=001010
+         15657793000 ch1 CS# high after 60 CK edges (0 data edges)
+         15657793000 ch0 CS# high after 60 CK edges (0 data edges)
+         15657869000 ch1 CA=1ffe0000fff8 WRITE MEM WRAPPED hw_addr=100000
+         15657869000 ch0 CA=1ffc0204fff8 WRITE MEM WRAPPED hw_addr=001020
+         15658075000 ch1 CS# high after 60 CK edges (0 data edges)
+         15658075000 ch0 CS# high after 60 CK edges (0 data edges)
+         15658491000 ch0 CA=9ffc0200fff8  READ MEM WRAPPED hw_addr=001000
+         15658697000 ch0 CS# high after 60 CK edges (0 data edges)
+         15658773000 ch0 CA=9ffc0202fff8  READ MEM WRAPPED hw_addr=001010
+         15658979000 ch0 CS# high after 60 CK edges (0 data edges)
+         15659054000 ch0 CA=9ffc0200fff9  READ MEM WRAPPED hw_addr=001001
+         15659260000 ch0 CS# high after 60 CK edges (0 data edges)
+         15659336000 ch0 CA=9ffc0200fffa  READ MEM WRAPPED hw_addr=001002
+         15659542000 ch0 CS# high after 60 CK edges (0 data edges)
+         15659617000 ch0 CA=9ffc0201fff8  READ MEM WRAPPED hw_addr=001008
+         15659823000 ch0 CS# high after 60 CK edges (0 data edges)
+         15659899000 ch0 CA=9ffc0201ffff  READ MEM WRAPPED hw_addr=00100f
+         15660105000 ch0 CS# high after 60 CK edges (0 data edges)
+         15660180000 ch0 CA=9ffc0202fffb  READ MEM WRAPPED hw_addr=001013
+         15660386000 ch0 CS# high after 60 CK edges (0 data edges)
+         15660462000 ch1 CA=9ffc0200fff8  READ MEM WRAPPED hw_addr=001000
+         15660668000 ch1 CS# high after 60 CK edges (0 data edges)
+         15660743000 ch1 CA=9ffffffefff8  READ MEM WRAPPED hw_addr=1ffff0
+         15660949000 ch1 CS# high after 60 CK edges (0 data edges)
+         15661025000 ch1 CA=9ffe0000fff8  READ MEM WRAPPED hw_addr=100000
+         15661231000 ch1 CS# high after 60 CK edges (0 data edges)
+         15661307000 ch1 CA=9ffffffffff8  READ MEM WRAPPED hw_addr=1ffff8
+         15661512000 ch1 CS# high after 60 CK edges (0 data edges)
+         15661944000 ch0 CA=1ffc0202fffd WRITE MEM WRAPPED hw_addr=001015
+         15662149000 ch0 CS# high after 60 CK edges (0 data edges)
+         15662225000 ch0 CA=1ffc0204fffa WRITE MEM WRAPPED hw_addr=001022
+         15662431000 ch0 CS# high after 60 CK edges (0 data edges)
+         15662507000 ch0 CA=9ffc0202fff8  READ MEM WRAPPED hw_addr=001010
+         15662712000 ch0 CS# high after 60 CK edges (0 data edges)
+         15662788000 ch0 CA=9ffc0204fff8  READ MEM WRAPPED hw_addr=001020
+         15662994000 ch0 CS# high after 60 CK edges (0 data edges)
+         15663070000 ch0 CA=9ffc0206fff8  READ MEM WRAPPED hw_addr=001030
+         15663275000 ch0 CS# high after 60 CK edges (0 data edges)
+  read ch0 addr=001000 issued@1056814: 8 beats, first@1056830 -> latency 16 (consecutive)
+    beat 0: 51945414 [id51 L2:id1/k0 L1:id1/k0 L0:id1/k0]
+    beat 1: 51955515 [id51 L2:id1/k1 L1:id1/k1 L0:id1/k1]
+    beat 2: 51965616 [id51 L2:id1/k2 L1:id1/k2 L0:id1/k2]
+    beat 3: 51975717 [id51 L2:id1/k3 L1:id1/k3 L0:id1/k3]
+    beat 4: 51985818 [id51 L2:id1/k4 L1:id1/k4 L0:id1/k4]
+    beat 5: 51995919 [id51 L2:id1/k5 L1:id1/k5 L0:id1/k5]
+    beat 6: 519a5a1a [id51 L2:id1/k6 L1:id1/k6 L0:id1/k6]
+    beat 7: 519b5b1b [id51 L2:id1/k7 L1:id1/k7 L0:id1/k7]
+  read ch0 addr=001010 issued@1056833: 8 beats, first@1056849 -> latency 16 (consecutive)
+    beat 0: 52a46424 [id52 L2:id2/k0 L1:id2/k0 L0:id2/k0]
+    beat 1: 52a56525 [id52 L2:id2/k1 L1:id2/k1 L0:id2/k1]
+    beat 2: 52a66626 [id52 L2:id2/k2 L1:id2/k2 L0:id2/k2]
+    beat 3: 52a76727 [id52 L2:id2/k3 L1:id2/k3 L0:id2/k3]
+    beat 4: 52a86828 [id52 L2:id2/k4 L1:id2/k4 L0:id2/k4]
+    beat 5: 52a96929 [id52 L2:id2/k5 L1:id2/k5 L0:id2/k5]
+    beat 6: 52aa6a2a [id52 L2:id2/k6 L1:id2/k6 L0:id2/k6]
+    beat 7: 52ab6b2b [id52 L2:id2/k7 L1:id2/k7 L0:id2/k7]
+  read ch0 addr=001001 issued@1056852: 8 beats, first@1056868 -> latency 16 (consecutive)
+    beat 0: 54145195 [id54 L2:id1/k0 L1:id1/k-3 L0:id1/k1]
+    beat 1: 55155196 [id55 L2:id1/k1 L1:id1/k-3 L0:id1/k2]
+    beat 2: 56165197 [id56 L2:id1/k2 L1:id1/k-3 L0:id1/k3]
+    beat 3: 57175198 [id57 L2:id1/k3 L1:id1/k-3 L0:id1/k4]
+    beat 4: 58185199 [id58 L2:id1/k4 L1:id1/k-3 L0:id1/k5]
+    beat 5: 5919519a [id59 L2:id1/k5 L1:id1/k-3 L0:id1/k6]
+    beat 6: 5a1a519b [id5a L2:id1/k6 L1:id1/k-3 L0:id1/k7]
+    beat 7: 5b1b5194 [id5b L2:id1/k7 L1:id1/k-3 L0:id1/k0]
+  read ch0 addr=001002 issued@1056871: 8 beats, first@1056887 -> latency 16 (consecutive)
+    beat 0: 51955515 [id51 L2:id1/k1 L1:id1/k1 L0:id1/k1]
+    beat 1: 51965616 [id51 L2:id1/k2 L1:id1/k2 L0:id1/k2]
+    beat 2: 51975717 [id51 L2:id1/k3 L1:id1/k3 L0:id1/k3]
+    beat 3: 51985818 [id51 L2:id1/k4 L1:id1/k4 L0:id1/k4]
+    beat 4: 51995919 [id51 L2:id1/k5 L1:id1/k5 L0:id1/k5]
+    beat 5: 519a5a1a [id51 L2:id1/k6 L1:id1/k6 L0:id1/k6]
+    beat 6: 519b5b1b [id51 L2:id1/k7 L1:id1/k7 L0:id1/k7]
+    beat 7: 51945414 [id51 L2:id1/k0 L1:id1/k0 L0:id1/k0]
+  read ch0 addr=001008 issued@1056890: 8 beats, first@1056906 -> latency 16 (consecutive)
+    beat 0: 51985818 [id51 L2:id1/k4 L1:id1/k4 L0:id1/k4]
+    beat 1: 51995919 [id51 L2:id1/k5 L1:id1/k5 L0:id1/k5]
+    beat 2: 519a5a1a [id51 L2:id1/k6 L1:id1/k6 L0:id1/k6]
+    beat 3: 519b5b1b [id51 L2:id1/k7 L1:id1/k7 L0:id1/k7]
+    beat 4: 51945414 [id51 L2:id1/k0 L1:id1/k0 L0:id1/k0]
+    beat 5: 51955515 [id51 L2:id1/k1 L1:id1/k1 L0:id1/k1]
+    beat 6: 51965616 [id51 L2:id1/k2 L1:id1/k2 L0:id1/k2]
+    beat 7: 51975717 [id51 L2:id1/k3 L1:id1/k3 L0:id1/k3]
+  read ch0 addr=00100f issued@1056909: 8 beats, first@1056925 -> latency 16 (consecutive)
+    beat 0: 5b1b5194 [id5b L2:id1/k7 L1:id1/k-3 L0:id1/k0]
+    beat 1: 54145195 [id54 L2:id1/k0 L1:id1/k-3 L0:id1/k1]
+    beat 2: 55155196 [id55 L2:id1/k1 L1:id1/k-3 L0:id1/k2]
+    beat 3: 56165197 [id56 L2:id1/k2 L1:id1/k-3 L0:id1/k3]
+    beat 4: 57175198 [id57 L2:id1/k3 L1:id1/k-3 L0:id1/k4]
+    beat 5: 58185199 [id58 L2:id1/k4 L1:id1/k-3 L0:id1/k5]
+    beat 6: 5919519a [id59 L2:id1/k5 L1:id1/k-3 L0:id1/k6]
+    beat 7: 5a1a519b [id5a L2:id1/k6 L1:id1/k-3 L0:id1/k7]
+  read ch0 addr=001013 issued@1056928: 8 beats, first@1056944 -> latency 16 (consecutive)
+    beat 0: 652552a6 [id65 L2:id2/k1 L1:id1/k-2 L0:id2/k2]
+    beat 1: 662652a7 [id66 L2:id2/k2 L1:id1/k-2 L0:id2/k3]
+    beat 2: 672752a8 [id67 L2:id2/k3 L1:id1/k-2 L0:id2/k4]
+    beat 3: 682852a9 [id68 L2:id2/k4 L1:id1/k-2 L0:id2/k5]
+    beat 4: 692952aa [id69 L2:id2/k5 L1:id1/k-2 L0:id2/k6]
+    beat 5: 6a2a52ab [id6a L2:id2/k6 L1:id1/k-2 L0:id2/k7]
+    beat 6: 6b2b52a4 [id6b L2:id2/k7 L1:id1/k-2 L0:id2/k0]
+    beat 7: 642452a5 [id64 L2:id2/k0 L1:id1/k-2 L0:id2/k1]
+  read ch1 addr=001000 issued@1056947: 8 beats, first@1056963 -> latency 16 (consecutive)
+    beat 0: 61945414 [id61 L2:id1/k0 L1:id1/k0 L0:id1/k0]
+    beat 1: 61955515 [id61 L2:id1/k1 L1:id1/k1 L0:id1/k1]
+    beat 2: 61965616 [id61 L2:id1/k2 L1:id1/k2 L0:id1/k2]
+    beat 3: 61975717 [id61 L2:id1/k3 L1:id1/k3 L0:id1/k3]
+    beat 4: 61985818 [id61 L2:id1/k4 L1:id1/k4 L0:id1/k4]
+    beat 5: 61995919 [id61 L2:id1/k5 L1:id1/k5 L0:id1/k5]
+    beat 6: 619a5a1a [id61 L2:id1/k6 L1:id1/k6 L0:id1/k6]
+    beat 7: 619b5b1b [id61 L2:id1/k7 L1:id1/k7 L0:id1/k7]
+  read ch1 addr=1ffff0 issued@1056966: 8 beats, first@1056982 -> latency 16 (consecutive)
+    beat 0: 62a46424 [id62 L2:id2/k0 L1:id2/k0 L0:id2/k0]
+    beat 1: 62a56525 [id62 L2:id2/k1 L1:id2/k1 L0:id2/k1]
+    beat 2: 62a66626 [id62 L2:id2/k2 L1:id2/k2 L0:id2/k2]
+    beat 3: 62a76727 [id62 L2:id2/k3 L1:id2/k3 L0:id2/k3]
+    beat 4: 62a86828 [id62 L2:id2/k4 L1:id2/k4 L0:id2/k4]
+    beat 5: 62a96929 [id62 L2:id2/k5 L1:id2/k5 L0:id2/k5]
+    beat 6: 62aa6a2a [id62 L2:id2/k6 L1:id2/k6 L0:id2/k6]
+    beat 7: 62ab6b2b [id62 L2:id2/k7 L1:id2/k7 L0:id2/k7]
+  read ch1 addr=100000 issued@1056985: 8 beats, first@1057001 -> latency 16 (consecutive)
+    beat 0: 63b47434 [id63 L2:id3/k0 L1:id3/k0 L0:id3/k0]
+    beat 1: 63b57535 [id63 L2:id3/k1 L1:id3/k1 L0:id3/k1]
+    beat 2: 63b67636 [id63 L2:id3/k2 L1:id3/k2 L0:id3/k2]
+    beat 3: 63b77737 [id63 L2:id3/k3 L1:id3/k3 L0:id3/k3]
+    beat 4: 63b87838 [id63 L2:id3/k4 L1:id3/k4 L0:id3/k4]
+    beat 5: 63b97939 [id63 L2:id3/k5 L1:id3/k5 L0:id3/k5]
+    beat 6: 63ba7a3a [id63 L2:id3/k6 L1:id3/k6 L0:id3/k6]
+    beat 7: 63bb7b3b [id63 L2:id3/k7 L1:id3/k7 L0:id3/k7]
+  read ch1 addr=1ffff8 issued@1057004: 8 beats, first@1057020 -> latency 16 (consecutive)
+    beat 0: 62a86828 [id62 L2:id2/k4 L1:id2/k4 L0:id2/k4]
+    beat 1: 62a96929 [id62 L2:id2/k5 L1:id2/k5 L0:id2/k5]
+    beat 2: 62aa6a2a [id62 L2:id2/k6 L1:id2/k6 L0:id2/k6]
+    beat 3: 62ab6b2b [id62 L2:id2/k7 L1:id2/k7 L0:id2/k7]
+    beat 4: 62a46424 [id62 L2:id2/k0 L1:id2/k0 L0:id2/k0]
+    beat 5: 62a56525 [id62 L2:id2/k1 L1:id2/k1 L0:id2/k1]
+    beat 6: 62a66626 [id62 L2:id2/k2 L1:id2/k2 L0:id2/k2]
+    beat 7: 62a76727 [id62 L2:id2/k3 L1:id2/k3 L0:id2/k3]
+  after unaligned writes id54 @001015 and id55 @001022:
+  read ch0 addr=001010 issued@1057085: 8 beats, first@1057101 -> latency 16 (consecutive)
+    beat 0: 4909548a [id49 L2:id0/k5 L1:id1/k0 L0:id0/k6]
+    beat 1: 4a0a548b [id4a L2:id0/k6 L1:id1/k0 L0:id0/k7]
+    beat 2: 4b0b5484 [id4b L2:id0/k7 L1:id1/k0 L0:id0/k0]
+    beat 3: 44045485 [id44 L2:id0/k0 L1:id1/k0 L0:id0/k1]
+    beat 4: 45055486 [id45 L2:id0/k1 L1:id1/k0 L0:id0/k2]
+    beat 5: 46065487 [id46 L2:id0/k2 L1:id1/k0 L0:id0/k3]
+    beat 6: 47075488 [id47 L2:id0/k3 L1:id1/k0 L0:id0/k4]
+    beat 7: 48085489 [id48 L2:id0/k4 L1:id1/k0 L0:id0/k5]
+  read ch0 addr=001020 issued@1057104: 8 beats, first@1057120 -> latency 16 (consecutive)
+    beat 0: 559b5b1b [id55 L2:id1/k7 L1:id1/k7 L0:id1/k7]
+    beat 1: 55945414 [id55 L2:id1/k0 L1:id1/k0 L0:id1/k0]
+    beat 2: 55955515 [id55 L2:id1/k1 L1:id1/k1 L0:id1/k1]
+    beat 3: 55965616 [id55 L2:id1/k2 L1:id1/k2 L0:id1/k2]
+    beat 4: 55975717 [id55 L2:id1/k3 L1:id1/k3 L0:id1/k3]
+    beat 5: 55985818 [id55 L2:id1/k4 L1:id1/k4 L0:id1/k4]
+    beat 6: 55995919 [id55 L2:id1/k5 L1:id1/k5 L0:id1/k5]
+    beat 7: 559a5a1a [id55 L2:id1/k6 L1:id1/k6 L0:id1/k6]
+  read ch0 addr=001030 issued@1057123: 8 beats, first@1057139 -> latency 16 (consecutive)
+    beat 0: 00000000 [id00 L2:id0/k-4 L1:id0/k-4 L0:id0/k-4]
+    beat 1: 00000000 [id00 L2:id0/k-4 L1:id0/k-4 L0:id0/k-4]
+    beat 2: 00000000 [id00 L2:id0/k-4 L1:id0/k-4 L0:id0/k-4]
+    beat 3: 00000000 [id00 L2:id0/k-4 L1:id0/k-4 L0:id0/k-4]
+    beat 4: 00000000 [id00 L2:id0/k-4 L1:id0/k-4 L0:id0/k-4]
+    beat 5: 00000000 [id00 L2:id0/k-4 L1:id0/k-4 L0:id0/k-4]
+    beat 6: 00000000 [id00 L2:id0/k-4 L1:id0/k-4 L0:id0/k-4]
+    beat 7: 00000000 [id00 L2:id0/k-4 L1:id0/k-4 L0:id0/k-4]
+  pin model ch0 halfwords 0x1000..0x102f (after all P4 writes):
+   00001000: 5194 5414 5195 5515 5196 5616 5197 5717 5198 5818 5199 5919 519a 5a1a 519b 5b1b
+   00001010: 4909 548a 4a0a 548b 4b0b 5484 4404 5485 4505 5486 4606 5487 4707 5488 4808 5489
+   00001020: 559b 5b1b 5594 5414 5595 5515 5596 5616 5597 5717 5598 5818 5599 5919 559a 5a1a
+  pin model ch1 hw 0x1000: 6194 5414, 0x1ffff0: 62a4 6424, 0x100000: 63b4 7434
+
+==== phase P5 TCMD combos (T0+1293, t=15663864000)
+         15664107000 ch0 CA=1ffc0400fff8 WRITE MEM WRAPPED hw_addr=002000
+         15664312000 ch0 CS# high after 60 CK edges (0 data edges)
+         15664388000 ch0 CA=9ffc0400fff8  READ MEM WRAPPED hw_addr=002000
+         15664594000 ch0 CS# high after 60 CK edges (0 data edges)
+         15664670000 ch0 CA=9ffc0200fff8  READ MEM WRAPPED hw_addr=001000
+         15664875000 ch0 CS# high after 60 CK edges (0 data edges)
+         15664951000 ch0 CA=1ffc0400fff8 WRITE MEM WRAPPED hw_addr=002000
+         15665157000 ch0 CS# high after 60 CK edges (0 data edges)
+         15665233000 ch0 CA=9ffc0400fff8  READ MEM WRAPPED hw_addr=002000
+         15665438000 ch0 CS# high after 60 CK edges (0 data edges)
+         15665514000 ch0 CA=1ffc0402fff8 WRITE MEM WRAPPED hw_addr=002010
+         15665720000 ch0 CS# high after 60 CK edges (0 data edges)
+         15665796000 ch0 CA=1ffc0404fff8 WRITE MEM WRAPPED hw_addr=002020
+         15666001000 ch0 CS# high after 60 CK edges (0 data edges)
+         15666077000 ch0 CA=9ffc0402fff8  READ MEM WRAPPED hw_addr=002010
+         15666283000 ch0 CS# high after 60 CK edges (0 data edges)
+         15666359000 ch0 CA=9ffc0404fff8  READ MEM WRAPPED hw_addr=002020
+         15666564000 ch0 CS# high after 60 CK edges (0 data edges)
+  read ch0 addr=002000 issued@1057212: 8 beats, first@1057228 -> latency 16 (consecutive)
+    beat 0: 71945414 [id71 L2:id1/k0 L1:id1/k0 L0:id1/k0]
+    beat 1: 71955515 [id71 L2:id1/k1 L1:id1/k1 L0:id1/k1]
+    beat 2: 71965616 [id71 L2:id1/k2 L1:id1/k2 L0:id1/k2]
+    beat 3: 71975717 [id71 L2:id1/k3 L1:id1/k3 L0:id1/k3]
+    beat 4: 71985818 [id71 L2:id1/k4 L1:id1/k4 L0:id1/k4]
+    beat 5: 71995919 [id71 L2:id1/k5 L1:id1/k5 L0:id1/k5]
+    beat 6: 719a5a1a [id71 L2:id1/k6 L1:id1/k6 L0:id1/k6]
+    beat 7: 719b5b1b [id71 L2:id1/k7 L1:id1/k7 L0:id1/k7]
+  read ch0 addr=001000 issued@1057231: 8 beats, first@1057247 -> latency 16 (consecutive)
+    beat 0: 51945414 [id51 L2:id1/k0 L1:id1/k0 L0:id1/k0]
+    beat 1: 51955515 [id51 L2:id1/k1 L1:id1/k1 L0:id1/k1]
+    beat 2: 51965616 [id51 L2:id1/k2 L1:id1/k2 L0:id1/k2]
+    beat 3: 51975717 [id51 L2:id1/k3 L1:id1/k3 L0:id1/k3]
+    beat 4: 51985818 [id51 L2:id1/k4 L1:id1/k4 L0:id1/k4]
+    beat 5: 51995919 [id51 L2:id1/k5 L1:id1/k5 L0:id1/k5]
+    beat 6: 519a5a1a [id51 L2:id1/k6 L1:id1/k6 L0:id1/k6]
+    beat 7: 519b5b1b [id51 L2:id1/k7 L1:id1/k7 L0:id1/k7]
+  read ch0 addr=002000 issued@1057269: 8 beats, first@1057285 -> latency 16 (consecutive)
+    beat 0: 72a46424 [id72 L2:id2/k0 L1:id2/k0 L0:id2/k0]
+    beat 1: 72a56525 [id72 L2:id2/k1 L1:id2/k1 L0:id2/k1]
+    beat 2: 72a66626 [id72 L2:id2/k2 L1:id2/k2 L0:id2/k2]
+    beat 3: 72a76727 [id72 L2:id2/k3 L1:id2/k3 L0:id2/k3]
+    beat 4: 72a86828 [id72 L2:id2/k4 L1:id2/k4 L0:id2/k4]
+    beat 5: 72a96929 [id72 L2:id2/k5 L1:id2/k5 L0:id2/k5]
+    beat 6: 72aa6a2a [id72 L2:id2/k6 L1:id2/k6 L0:id2/k6]
+    beat 7: 72ab6b2b [id72 L2:id2/k7 L1:id2/k7 L0:id2/k7]
+  read ch0 addr=002010 issued@1057326: 8 beats, first@1057342 -> latency 16 (consecutive)
+    beat 0: 73b47434 [id73 L2:id3/k0 L1:id3/k0 L0:id3/k0]
+    beat 1: 73b57535 [id73 L2:id3/k1 L1:id3/k1 L0:id3/k1]
+    beat 2: 73b67636 [id73 L2:id3/k2 L1:id3/k2 L0:id3/k2]
+    beat 3: 73b77737 [id73 L2:id3/k3 L1:id3/k3 L0:id3/k3]
+    beat 4: 73b87838 [id73 L2:id3/k4 L1:id3/k4 L0:id3/k4]
+    beat 5: 73b97939 [id73 L2:id3/k5 L1:id3/k5 L0:id3/k5]
+    beat 6: 73ba7a3a [id73 L2:id3/k6 L1:id3/k6 L0:id3/k6]
+    beat 7: 73bb7b3b [id73 L2:id3/k7 L1:id3/k7 L0:id3/k7]
+  read ch0 addr=002020 issued@1057345: 8 beats, first@1057361 -> latency 16 (consecutive)
+    beat 0: 74844404 [id74 L2:id0/k0 L1:id0/k0 L0:id0/k0]
+    beat 1: 74854505 [id74 L2:id0/k1 L1:id0/k1 L0:id0/k1]
+    beat 2: 74864606 [id74 L2:id0/k2 L1:id0/k2 L0:id0/k2]
+    beat 3: 74874707 [id74 L2:id0/k3 L1:id0/k3 L0:id0/k3]
+    beat 4: 74884808 [id74 L2:id0/k4 L1:id0/k4 L0:id0/k4]
+    beat 5: 74894909 [id74 L2:id0/k5 L1:id0/k5 L0:id0/k5]
+    beat 6: 748a4a0a [id74 L2:id0/k6 L1:id0/k6 L0:id0/k6]
+    beat 7: 748b4b0b [id74 L2:id0/k7 L1:id0/k7 L0:id0/k7]
+  model protocol errors in legal phases so far: 0
+
+==== phase P6 random (T0+1515, t=15667153000)
+         15667396000 ch0 CA=9ffc0004fffd  READ MEM WRAPPED hw_addr=000025
+         15667440000 ch1 CA=9ffc0017fffb  READ MEM WRAPPED hw_addr=0000bb
+         15667601000 ch0 CS# high after 60 CK edges (0 data edges)
+         15667646000 ch1 CS# high after 60 CK edges (0 data edges)
+         15667677000 ch0 CA=1ffc0001fffa WRITE MEM WRAPPED hw_addr=00000a
+         15667883000 ch0 CS# high after 60 CK edges (0 data edges)
+         15667959000 ch0 CA=9ffc000efffb  READ MEM WRAPPED hw_addr=000073
+         15668018000 ch1 CA=1ffc0009fffc WRITE MEM WRAPPED hw_addr=00004c
+         15668164000 ch0 CS# high after 60 CK edges (0 data edges)
+         15668224000 ch1 CS# high after 60 CK edges (0 data edges)
+         15668240000 ch0 CA=9ffc0005fffd  READ MEM WRAPPED hw_addr=00002d
+         15668300000 ch1 CA=9ffc001cffff  READ MEM WRAPPED hw_addr=0000e7
+         15668446000 ch0 CS# high after 60 CK edges (0 data edges)
+         15668505000 ch1 CS# high after 60 CK edges (0 data edges)
+         15668522000 ch0 CA=9ffc001afffd  READ MEM WRAPPED hw_addr=0000d5
+         15668727000 ch0 CS# high after 60 CK edges (0 data edges)
+         15668877000 ch1 CA=1ffc0013fffd WRITE MEM WRAPPED hw_addr=00009d
+         15669083000 ch1 CS# high after 60 CK edges (0 data edges)
+         15669100000 ch0 CA=9ffc0019fffe  READ MEM WRAPPED hw_addr=0000ce
+         15669159000 ch1 CA=1ffc000cfffc WRITE MEM WRAPPED hw_addr=000064
+         15669305000 ch0 CS# high after 60 CK edges (0 data edges)
+         15669365000 ch1 CS# high after 60 CK edges (0 data edges)
+         15669678000 ch0 CA=9ffc001affff  READ MEM WRAPPED hw_addr=0000d7
+         15669737000 ch1 CA=9ffc000afff8  READ MEM WRAPPED hw_addr=000050
+         15669883000 ch0 CS# high after 60 CK edges (0 data edges)
+         15669942000 ch1 CS# high after 60 CK edges (0 data edges)
+         15669959000 ch0 CA=9ffc0018fffd  READ MEM WRAPPED hw_addr=0000c5
+         15670018000 ch1 CA=1ffc001efffb WRITE MEM WRAPPED hw_addr=0000f3
+         15670165000 ch0 CS# high after 60 CK edges (0 data edges)
+         15670224000 ch1 CS# high after 60 CK edges (0 data edges)
+         15670241000 ch0 CA=1ffc001cfffc WRITE MEM WRAPPED hw_addr=0000e4
+         15670446000 ch0 CS# high after 60 CK edges (0 data edges)
+         15670596000 ch1 CA=9ffc0019fff9  READ MEM WRAPPED hw_addr=0000c9
+         15670802000 ch1 CS# high after 60 CK edges (0 data edges)
+         15670818000 ch0 CA=9ffc0019fffb  READ MEM WRAPPED hw_addr=0000cb
+         15670878000 ch1 CA=9ffc001efffe  READ MEM WRAPPED hw_addr=0000f6
+         15671024000 ch0 CS# high after 60 CK edges (0 data edges)
+         15671083000 ch1 CS# high after 60 CK edges (0 data edges)
+         15671159000 ch1 CA=1ffc0002fffe WRITE MEM WRAPPED hw_addr=000016
+         15671365000 ch1 CS# high after 60 CK edges (0 data edges)
+         15671396000 ch0 CA=9ffc0002fff8  READ MEM WRAPPED hw_addr=000010
+         15671602000 ch0 CS# high after 60 CK edges (0 data edges)
+         15671737000 ch1 CA=1ffc0015ffff WRITE MEM WRAPPED hw_addr=0000af
+         15671943000 ch1 CS# high after 60 CK edges (0 data edges)
+         15672018000 ch1 CA=1ffc0018fff8 WRITE MEM WRAPPED hw_addr=0000c0
+         15672137000 ch0 CA=9ffc0017fffc  READ MEM WRAPPED hw_addr=0000bc
+         15672224000 ch1 CS# high after 60 CK edges (0 data edges)
+         15672343000 ch0 CS# high after 60 CK edges (0 data edges)
+         15672419000 ch0 CA=9ffc0010fffc  READ MEM WRAPPED hw_addr=000084
+         15672596000 ch1 CA=9ffc0006fffb  READ MEM WRAPPED hw_addr=000033
+         15672624000 ch0 CS# high after 60 CK edges (0 data edges)
+         15672802000 ch1 CS# high after 60 CK edges (0 data edges)
+         15672996000 ch0 CA=1ffc001dfffa WRITE MEM WRAPPED hw_addr=0000ea
+         15673174000 ch1 CA=9ffc0013fffe  READ MEM WRAPPED hw_addr=00009e
+         15673202000 ch0 CS# high after 60 CK edges (0 data edges)
+         15673380000 ch1 CS# high after 60 CK edges (0 data edges)
+         15673456000 ch1 CA=1ffc0011fffb WRITE MEM WRAPPED hw_addr=00008b
+         15673574000 ch0 CA=1ffc0014fffb WRITE MEM WRAPPED hw_addr=0000a3
+         15673661000 ch1 CS# high after 60 CK edges (0 data edges)
+         15673737000 ch1 CA=1ffc000dfffb WRITE MEM WRAPPED hw_addr=00006b
+         15673780000 ch0 CS# high after 60 CK edges (0 data edges)
+         15673856000 ch0 CA=9ffc000afffa  READ MEM WRAPPED hw_addr=000052
+         15673943000 ch1 CS# high after 60 CK edges (0 data edges)
+         15674019000 ch1 CA=9ffc0016fffa  READ MEM WRAPPED hw_addr=0000b2
+         15674061000 ch0 CS# high after 60 CK edges (0 data edges)
+         15674137000 ch0 CA=1ffc000dfffc WRITE MEM WRAPPED hw_addr=00006c
+         15674224000 ch1 CS# high after 60 CK edges (0 data edges)
+         15674300000 ch1 CA=9ffc0013fffe  READ MEM WRAPPED hw_addr=00009e
+         15674343000 ch0 CS# high after 60 CK edges (0 data edges)
+         15674419000 ch0 CA=9ffc001cfff8  READ MEM WRAPPED hw_addr=0000e0
+         15674506000 ch1 CS# high after 60 CK edges (0 data edges)
+         15674582000 ch1 CA=1ffc0002fffe WRITE MEM WRAPPED hw_addr=000016
+         15674624000 ch0 CS# high after 60 CK edges (0 data edges)
+         15674787000 ch1 CS# high after 60 CK edges (0 data edges)
+         15674996000 ch0 CA=9ffc0012fffb  READ MEM WRAPPED hw_addr=000093
+         15675159000 ch1 CA=1ffc0006fff8 WRITE MEM WRAPPED hw_addr=000030
+         15675202000 ch0 CS# high after 60 CK edges (0 data edges)
+         15675365000 ch1 CS# high after 60 CK edges (0 data edges)
+         15675574000 ch0 CA=9ffc0019fff9  READ MEM WRAPPED hw_addr=0000c9
+         15675780000 ch0 CS# high after 60 CK edges (0 data edges)
+         15675930000 ch1 CA=1ffc0018fffe WRITE MEM WRAPPED hw_addr=0000c6
+         15676135000 ch1 CS# high after 60 CK edges (0 data edges)
+         15676152000 ch0 CA=1ffc0002fff8 WRITE MEM WRAPPED hw_addr=000010
+         15676211000 ch1 CA=1ffc0010fff8 WRITE MEM WRAPPED hw_addr=000080
+         15676358000 ch0 CS# high after 60 CK edges (0 data edges)
+         15676417000 ch1 CS# high after 60 CK edges (0 data edges)
+         15676493000 ch1 CA=1ffc0010fff8 WRITE MEM WRAPPED hw_addr=000080
+         15676698000 ch1 CS# high after 60 CK edges (0 data edges)
+         15676730000 ch0 CA=1ffc0009fffe WRITE MEM WRAPPED hw_addr=00004e
+         15676774000 ch1 CA=9ffc0015fffe  READ MEM WRAPPED hw_addr=0000ae
+         15676936000 ch0 CS# high after 60 CK edges (0 data edges)
+         15676980000 ch1 CS# high after 60 CK edges (0 data edges)
+         15677011000 ch0 CA=9ffc001cffff  READ MEM WRAPPED hw_addr=0000e7
+         15677056000 ch1 CA=1ffc000ffff8 WRITE MEM WRAPPED hw_addr=000078
+         15677217000 ch0 CS# high after 60 CK edges (0 data edges)
+         15677261000 ch1 CS# high after 60 CK edges (0 data edges)
+         15677337000 ch1 CA=9ffc0014fffb  READ MEM WRAPPED hw_addr=0000a3
+         15677543000 ch1 CS# high after 60 CK edges (0 data edges)
+         15677589000 ch0 CA=9ffc0019fffb  READ MEM WRAPPED hw_addr=0000cb
+         15677619000 ch1 CA=1ffc0016fff8 WRITE MEM WRAPPED hw_addr=0000b0
+         15677795000 ch0 CS# high after 60 CK edges (0 data edges)
+         15677824000 ch1 CS# high after 60 CK edges (0 data edges)
+         15678167000 ch0 CA=1ffc0019fff8 WRITE MEM WRAPPED hw_addr=0000c8
+         15678373000 ch0 CS# high after 60 CK edges (0 data edges)
+         15678419000 ch1 CA=9ffc001afffa  READ MEM WRAPPED hw_addr=0000d2
+         15678625000 ch1 CS# high after 60 CK edges (0 data edges)
+         15678745000 ch0 CA=9ffc0006fff8  READ MEM WRAPPED hw_addr=000030
+         15678951000 ch0 CS# high after 60 CK edges (0 data edges)
+         15678997000 ch1 CA=9ffc000ffff8  READ MEM WRAPPED hw_addr=000078
+         15679202000 ch1 CS# high after 60 CK edges (0 data edges)
+         15679545000 ch0 CA=9ffc0004fff8  READ MEM WRAPPED hw_addr=000020
+         15679575000 ch1 CA=1ffc001ffff9 WRITE MEM WRAPPED hw_addr=0000f9
+         15679751000 ch0 CS# high after 60 CK edges (0 data edges)
+         15679780000 ch1 CS# high after 60 CK edges (0 data edges)
+         15679915000 ch0 CA=9ffc001efff8  READ MEM WRAPPED hw_addr=0000f0
+         15680121000 ch0 CS# high after 60 CK edges (0 data edges)
+         15680152000 ch1 CA=9ffc000dfffb  READ MEM WRAPPED hw_addr=00006b
+         15680358000 ch1 CS# high after 60 CK edges (0 data edges)
+         15680434000 ch1 CA=9ffc0012fff8  READ MEM WRAPPED hw_addr=000090
+         15680493000 ch0 CA=9ffc0013fffd  READ MEM WRAPPED hw_addr=00009d
+         15680640000 ch1 CS# high after 60 CK edges (0 data edges)
+         15680699000 ch0 CS# high after 60 CK edges (0 data edges)
+         15680715000 ch1 CA=1ffc0011fffb WRITE MEM WRAPPED hw_addr=00008b
+         15680775000 ch0 CA=9ffc0015fff8  READ MEM WRAPPED hw_addr=0000a8
+         15680921000 ch1 CS# high after 60 CK edges (0 data edges)
+         15680980000 ch0 CS# high after 60 CK edges (0 data edges)
+         15680997000 ch1 CA=1ffc0006fff8 WRITE MEM WRAPPED hw_addr=000030
+         15681203000 ch1 CS# high after 60 CK edges (0 data edges)
+         15681353000 ch0 CA=1ffc0018fffc WRITE MEM WRAPPED hw_addr=0000c4
+         15681367000 ch1 CA=1ffc001efff8 WRITE MEM WRAPPED hw_addr=0000f0
+         15681558000 ch0 CS# high after 60 CK edges (0 data edges)
+         15681573000 ch1 CS# high after 60 CK edges (0 data edges)
+         15681634000 ch0 CA=1ffc0016fff9 WRITE MEM WRAPPED hw_addr=0000b1
+         15681649000 ch1 CA=1ffc0012fff8 WRITE MEM WRAPPED hw_addr=000090
+         15681840000 ch0 CS# high after 60 CK edges (0 data edges)
+         15681854000 ch1 CS# high after 60 CK edges (0 data edges)
+         15681930000 ch1 CA=1ffc0019fffe WRITE MEM WRAPPED hw_addr=0000ce
+         15682136000 ch1 CS# high after 60 CK edges (0 data edges)
+         15682212000 ch1 CA=9ffc001cfffc  READ MEM WRAPPED hw_addr=0000e4
+         15682212000 ch0 CA=1ffc0008fff8 WRITE MEM WRAPPED hw_addr=000040
+         15682417000 ch1 CS# high after 60 CK edges (0 data edges)
+         15682417000 ch0 CS# high after 60 CK edges (0 data edges)
+         15682790000 ch1 CA=1ffc0012fffe WRITE MEM WRAPPED hw_addr=000096
+         15682790000 ch0 CA=1ffc000bfff8 WRITE MEM WRAPPED hw_addr=000058
+         15682995000 ch1 CS# high after 60 CK edges (0 data edges)
+         15682995000 ch0 CS# high after 60 CK edges (0 data edges)
+         15683071000 ch1 CA=1ffc0005fffb WRITE MEM WRAPPED hw_addr=00002b
+         15683277000 ch1 CS# high after 60 CK edges (0 data edges)
+         15683353000 ch1 CA=1ffc000cfff8 WRITE MEM WRAPPED hw_addr=000060
+         15683368000 ch0 CA=9ffc001efffc  READ MEM WRAPPED hw_addr=0000f4
+         15683558000 ch1 CS# high after 60 CK edges (0 data edges)
+         15683573000 ch0 CS# high after 60 CK edges (0 data edges)
+         15683634000 ch1 CA=1ffc0007fffe WRITE MEM WRAPPED hw_addr=00003e
+         15683649000 ch0 CA=1ffc0003fff8 WRITE MEM WRAPPED hw_addr=000018
+         15683840000 ch1 CS# high after 60 CK edges (0 data edges)
+         15683855000 ch0 CS# high after 60 CK edges (0 data edges)
+         15683931000 ch0 CA=1ffc0009fffb WRITE MEM WRAPPED hw_addr=00004b
+         15684136000 ch0 CS# high after 60 CK edges (0 data edges)
+         15684212000 ch1 CA=1ffc0006fff8 WRITE MEM WRAPPED hw_addr=000030
+         15684212000 ch0 CA=1ffc0017fffa WRITE MEM WRAPPED hw_addr=0000ba
+         15684418000 ch1 CS# high after 60 CK edges (0 data edges)
+         15684418000 ch0 CS# high after 60 CK edges (0 data edges)
+         15684494000 ch1 CA=1ffc000dfffd WRITE MEM WRAPPED hw_addr=00006d
+         15684494000 ch0 CA=1ffc0013fffd WRITE MEM WRAPPED hw_addr=00009d
+         15684699000 ch1 CS# high after 60 CK edges (0 data edges)
+         15684699000 ch0 CS# high after 60 CK edges (0 data edges)
+         15685071000 ch1 CA=9ffc0003fffa  READ MEM WRAPPED hw_addr=00001a
+         15685071000 ch0 CA=1ffc001cfff8 WRITE MEM WRAPPED hw_addr=0000e0
+         15685277000 ch1 CS# high after 60 CK edges (0 data edges)
+         15685277000 ch0 CS# high after 60 CK edges (0 data edges)
+         15685353000 ch1 CA=1ffc0006fff8 WRITE MEM WRAPPED hw_addr=000030
+         15685558000 ch1 CS# high after 60 CK edges (0 data edges)
+         15685634000 ch1 CA=9ffc0011fffc  READ MEM WRAPPED hw_addr=00008c
+         15685840000 ch1 CS# high after 60 CK edges (0 data edges)
+         15685871000 ch0 CA=1ffc001efff9 WRITE MEM WRAPPED hw_addr=0000f1
+         15686077000 ch0 CS# high after 60 CK edges (0 data edges)
+         15686212000 ch1 CA=1ffc0006fffa WRITE MEM WRAPPED hw_addr=000032
+         15686418000 ch1 CS# high after 60 CK edges (0 data edges)
+         15686449000 ch0 CA=1ffc001efffd WRITE MEM WRAPPED hw_addr=0000f5
+         15686494000 ch1 CA=9ffc000efffe  READ MEM WRAPPED hw_addr=000076
+         15686655000 ch0 CS# high after 60 CK edges (0 data edges)
+         15686699000 ch1 CS# high after 60 CK edges (0 data edges)
+         15686731000 ch0 CA=9ffc0007fffb  READ MEM WRAPPED hw_addr=00003b
+         15686936000 ch0 CS# high after 60 CK edges (0 data edges)
+         15687012000 ch0 CA=1ffc0019ffff WRITE MEM WRAPPED hw_addr=0000cf
+         15687072000 ch1 CA=9ffc0014fffd  READ MEM WRAPPED hw_addr=0000a5
+         15687218000 ch0 CS# high after 60 CK edges (0 data edges)
+         15687277000 ch1 CS# high after 60 CK edges (0 data edges)
+         15687294000 ch0 CA=1ffc000bfffc WRITE MEM WRAPPED hw_addr=00005c
+         15687353000 ch1 CA=1ffc001efff8 WRITE MEM WRAPPED hw_addr=0000f0
+         15687499000 ch0 CS# high after 60 CK edges (0 data edges)
+         15687559000 ch1 CS# high after 60 CK edges (0 data edges)
+         15687812000 ch1 CA=9ffc0007fffa  READ MEM WRAPPED hw_addr=00003a
+         15687872000 ch0 CA=9ffc0005fffc  READ MEM WRAPPED hw_addr=00002c
+         15688018000 ch1 CS# high after 60 CK edges (0 data edges)
+         15688077000 ch0 CS# high after 60 CK edges (0 data edges)
+         15688153000 ch0 CA=1ffc000dfff9 WRITE MEM WRAPPED hw_addr=000069
+         15688359000 ch0 CS# high after 60 CK edges (0 data edges)
+         15688390000 ch1 CA=9ffc001affff  READ MEM WRAPPED hw_addr=0000d7
+         15688596000 ch1 CS# high after 60 CK edges (0 data edges)
+         15688731000 ch0 CA=1ffc001fffff WRITE MEM WRAPPED hw_addr=0000ff
+         15688936000 ch0 CS# high after 60 CK edges (0 data edges)
+         15688968000 ch1 CA=9ffc001cfff8  READ MEM WRAPPED hw_addr=0000e0
+         15689012000 ch0 CA=1ffc0004fffc WRITE MEM WRAPPED hw_addr=000024
+         15689174000 ch1 CS# high after 60 CK edges (0 data edges)
+         15689218000 ch0 CS# high after 60 CK edges (0 data edges)
+         15689294000 ch0 CA=1ffc001afff8 WRITE MEM WRAPPED hw_addr=0000d0
+         15689427000 ch1 CA=9ffc0015fff8  READ MEM WRAPPED hw_addr=0000a8
+         15689500000 ch0 CS# high after 60 CK edges (0 data edges)
+         15689633000 ch1 CS# high after 60 CK edges (0 data edges)
+         15689709000 ch1 CA=1ffc0018fff8 WRITE MEM WRAPPED hw_addr=0000c0
+         15689914000 ch1 CS# high after 60 CK edges (0 data edges)
+         15690005000 ch0 CA=9ffc0004fffc  READ MEM WRAPPED hw_addr=000024
+         15690198000 ch1 CA=1ffc0009fffe WRITE MEM WRAPPED hw_addr=00004e
+         15690211000 ch0 CS# high after 60 CK edges (0 data edges)
+         15690403000 ch1 CS# high after 60 CK edges (0 data edges)
+         15690479000 ch1 CA=9ffc000bfffa  READ MEM WRAPPED hw_addr=00005a
+         15690583000 ch0 CA=9ffc0014fff8  READ MEM WRAPPED hw_addr=0000a0
+         15690685000 ch1 CS# high after 60 CK edges (0 data edges)
+         15690761000 ch1 CA=9ffc0013fffb  READ MEM WRAPPED hw_addr=00009b
+         15690788000 ch0 CS# high after 60 CK edges (0 data edges)
+         15690864000 ch0 CA=9ffc001efff8  READ MEM WRAPPED hw_addr=0000f0
+         15690966000 ch1 CS# high after 60 CK edges (0 data edges)
+         15691042000 ch1 CA=1ffc001efff8 WRITE MEM WRAPPED hw_addr=0000f0
+         15691070000 ch0 CS# high after 60 CK edges (0 data edges)
+         15691248000 ch1 CS# high after 60 CK edges (0 data edges)
+         15691324000 ch1 CA=1ffc0011ffff WRITE MEM WRAPPED hw_addr=00008f
+         15691442000 ch0 CA=9ffc0013fffa  READ MEM WRAPPED hw_addr=00009a
+         15691529000 ch1 CS# high after 60 CK edges (0 data edges)
+         15691648000 ch0 CS# high after 60 CK edges (0 data edges)
+         15691724000 ch0 CA=9ffc000dfffe  READ MEM WRAPPED hw_addr=00006e
+         15691902000 ch1 CA=1ffc001efffb WRITE MEM WRAPPED hw_addr=0000f3
+         15691929000 ch0 CS# high after 60 CK edges (0 data edges)
+         15692005000 ch0 CA=9ffc0015fffc  READ MEM WRAPPED hw_addr=0000ac
+         15692107000 ch1 CS# high after 60 CK edges (0 data edges)
+         15692211000 ch0 CS# high after 60 CK edges (0 data edges)
+         15692479000 ch1 CA=9ffc000effff  READ MEM WRAPPED hw_addr=000077
+         15692583000 ch0 CA=1ffc0001fffc WRITE MEM WRAPPED hw_addr=00000c
+         15692685000 ch1 CS# high after 60 CK edges (0 data edges)
+         15692789000 ch0 CS# high after 60 CK edges (0 data edges)
+         15692865000 ch0 CA=9ffc0010fffe  READ MEM WRAPPED hw_addr=000086
+         15693057000 ch1 CA=9ffc0016fff8  READ MEM WRAPPED hw_addr=0000b0
+         15693070000 ch0 CS# high after 60 CK edges (0 data edges)
+         15693263000 ch1 CS# high after 60 CK edges (0 data edges)
+         15693442000 ch0 CA=1ffc001afff9 WRITE MEM WRAPPED hw_addr=0000d1
+         15693648000 ch0 CS# high after 60 CK edges (0 data edges)
+         15693650000 ch1 CA=9ffc0004ffff  READ MEM WRAPPED hw_addr=000027
+         15693855000 ch1 CS# high after 60 CK edges (0 data edges)
+         15694020000 ch0 CA=1ffc000efff8 WRITE MEM WRAPPED hw_addr=000070
+         15694226000 ch0 CS# high after 60 CK edges (0 data edges)
+         15694228000 ch1 CA=1ffc000cfff8 WRITE MEM WRAPPED hw_addr=000060
+         15694433000 ch1 CS# high after 60 CK edges (0 data edges)
+         15694702000 ch0 CA=1ffc0008fffe WRITE MEM WRAPPED hw_addr=000046
+         15694805000 ch1 CA=9ffc0013fff9  READ MEM WRAPPED hw_addr=000099
+         15694907000 ch0 CS# high after 60 CK edges (0 data edges)
+         15695011000 ch1 CS# high after 60 CK edges (0 data edges)
+         15695087000 ch1 CA=9ffc0012fff8  READ MEM WRAPPED hw_addr=000090
+         15695280000 ch0 CA=1ffc0017fff9 WRITE MEM WRAPPED hw_addr=0000b9
+         15695293000 ch1 CS# high after 60 CK edges (0 data edges)
+         15695485000 ch0 CS# high after 60 CK edges (0 data edges)
+         15695487000 ch1 CA=9ffc0010fffd  READ MEM WRAPPED hw_addr=000085
+         15695693000 ch1 CS# high after 60 CK edges (0 data edges)
+         15695769000 ch1 CA=9ffc0005fff8  READ MEM WRAPPED hw_addr=000028
+         15695857000 ch0 CA=1ffc001afffc WRITE MEM WRAPPED hw_addr=0000d4
+         15695974000 ch1 CS# high after 60 CK edges (0 data edges)
+         15696063000 ch0 CS# high after 60 CK edges (0 data edges)
+         15696346000 ch1 CA=9ffc0009fffa  READ MEM WRAPPED hw_addr=00004a
+         15696435000 ch0 CA=9ffc0010fff8  READ MEM WRAPPED hw_addr=000080
+         15696552000 ch1 CS# high after 60 CK edges (0 data edges)
+         15696641000 ch0 CS# high after 60 CK edges (0 data edges)
+         15696717000 ch0 CA=1ffc0014fffd WRITE MEM WRAPPED hw_addr=0000a5
+         15696922000 ch0 CS# high after 60 CK edges (0 data edges)
+         15696924000 ch1 CA=1ffc001ffff9 WRITE MEM WRAPPED hw_addr=0000f9
+         15697130000 ch1 CS# high after 60 CK edges (0 data edges)
+         15697295000 ch0 CA=1ffc001afff8 WRITE MEM WRAPPED hw_addr=0000d0
+         15697500000 ch0 CS# high after 60 CK edges (0 data edges)
+         15697502000 ch1 CA=1ffc0014fff8 WRITE MEM WRAPPED hw_addr=0000a0
+         15697708000 ch1 CS# high after 60 CK edges (0 data edges)
+         15697946000 ch0 CA=1ffc0011fff8 WRITE MEM WRAPPED hw_addr=000088
+         15698080000 ch1 CA=9ffc0012fff9  READ MEM WRAPPED hw_addr=000091
+         15698152000 ch0 CS# high after 60 CK edges (0 data edges)
+         15698285000 ch1 CS# high after 60 CK edges (0 data edges)
+         15698361000 ch1 CA=9ffc000cfff8  READ MEM WRAPPED hw_addr=000060
+         15698524000 ch0 CA=1ffc001ffffb WRITE MEM WRAPPED hw_addr=0000fb
+         15698567000 ch1 CS# high after 60 CK edges (0 data edges)
+         15698643000 ch1 CA=1ffc0000fffa WRITE MEM WRAPPED hw_addr=000002
+         15698730000 ch0 CS# high after 60 CK edges (0 data edges)
+         15698848000 ch1 CS# high after 60 CK edges (0 data edges)
+         15699102000 ch0 CA=1ffc0013fffe WRITE MEM WRAPPED hw_addr=00009e
+         15699221000 ch1 CA=1ffc000bfff8 WRITE MEM WRAPPED hw_addr=000058
+         15699308000 ch0 CS# high after 60 CK edges (0 data edges)
+         15699426000 ch1 CS# high after 60 CK edges (0 data edges)
+         15699502000 ch1 CA=1ffc0013fffb WRITE MEM WRAPPED hw_addr=00009b
+         15699680000 ch0 CA=1ffc000afff8 WRITE MEM WRAPPED hw_addr=000050
+         15699708000 ch1 CS# high after 60 CK edges (0 data edges)
+         15699886000 ch0 CS# high after 60 CK edges (0 data edges)
+         15700080000 ch1 CA=1ffc0015fff8 WRITE MEM WRAPPED hw_addr=0000a8
+         15700258000 ch0 CA=1ffc001afffc WRITE MEM WRAPPED hw_addr=0000d4
+         15700286000 ch1 CS# high after 60 CK edges (0 data edges)
+         15700463000 ch0 CS# high after 60 CK edges (0 data edges)
+         15700658000 ch1 CA=1ffc0011ffff WRITE MEM WRAPPED hw_addr=00008f
+         15700836000 ch0 CA=1ffc000efffe WRITE MEM WRAPPED hw_addr=000076
+         15700863000 ch1 CS# high after 60 CK edges (0 data edges)
+         15700939000 ch1 CA=1ffc0003fffc WRITE MEM WRAPPED hw_addr=00001c
+         15701041000 ch0 CS# high after 60 CK edges (0 data edges)
+         15701145000 ch1 CS# high after 60 CK edges (0 data edges)
+         15701221000 ch1 CA=1ffc001cfff8 WRITE MEM WRAPPED hw_addr=0000e0
+         15701413000 ch0 CA=1ffc000afffa WRITE MEM WRAPPED hw_addr=000052
+         15701426000 ch1 CS# high after 60 CK edges (0 data edges)
+         15701619000 ch0 CS# high after 60 CK edges (0 data edges)
+         15701695000 ch0 CA=9ffc000cfff8  READ MEM WRAPPED hw_addr=000060
+         15701900000 ch0 CS# high after 60 CK edges (0 data edges)
+         15701932000 ch1 CA=9ffc000dfffb  READ MEM WRAPPED hw_addr=00006b
+         15702138000 ch1 CS# high after 60 CK edges (0 data edges)
+         15702213000 ch1 CA=1ffc0007fffe WRITE MEM WRAPPED hw_addr=00003e
+         15702419000 ch1 CS# high after 60 CK edges (0 data edges)
+         15702495000 ch1 CA=9ffc0008fff8  READ MEM WRAPPED hw_addr=000040
+         15702495000 ch0 CA=9ffc000efff8  READ MEM WRAPPED hw_addr=000070
+         15702701000 ch1 CS# high after 60 CK edges (0 data edges)
+         15702701000 ch0 CS# high after 60 CK edges (0 data edges)
+         15702925000 ch1 CA=1ffc0002fff8 WRITE MEM WRAPPED hw_addr=000010
+         15702925000 ch0 CA=1ffc0017fff9 WRITE MEM WRAPPED hw_addr=0000b9
+         15703130000 ch1 CS# high after 60 CK edges (0 data edges)
+         15703130000 ch0 CS# high after 60 CK edges (0 data edges)
+         15703206000 ch1 CA=1ffc001ffff8 WRITE MEM WRAPPED hw_addr=0000f8
+         15703412000 ch1 CS# high after 60 CK edges (0 data edges)
+         15703502000 ch0 CA=1ffc001effff WRITE MEM WRAPPED hw_addr=0000f7
+         15703708000 ch0 CS# high after 60 CK edges (0 data edges)
+         15703784000 ch1 CA=9ffc000bfff9  READ MEM WRAPPED hw_addr=000059
+         15703990000 ch1 CS# high after 60 CK edges (0 data edges)
+         15704065000 ch1 CA=1ffc001efff8 WRITE MEM WRAPPED hw_addr=0000f0
+         15704080000 ch0 CA=1ffc0001fffd WRITE MEM WRAPPED hw_addr=00000d
+         15704271000 ch1 CS# high after 60 CK edges (0 data edges)
+         15704286000 ch0 CS# high after 60 CK edges (0 data edges)
+         15704347000 ch1 CA=1ffc000afff8 WRITE MEM WRAPPED hw_addr=000050
+         15704553000 ch1 CS# high after 60 CK edges (0 data edges)
+         15704658000 ch0 CA=9ffc0017fffb  READ MEM WRAPPED hw_addr=0000bb
+         15704864000 ch0 CS# high after 60 CK edges (0 data edges)
+         15704925000 ch1 CA=1ffc0002fff8 WRITE MEM WRAPPED hw_addr=000010
+         15705130000 ch1 CS# high after 60 CK edges (0 data edges)
+         15705236000 ch0 CA=9ffc0001fffb  READ MEM WRAPPED hw_addr=00000b
+         15705442000 ch0 CS# high after 60 CK edges (0 data edges)
+         15705517000 ch1 CA=9ffc0002fff8  READ MEM WRAPPED hw_addr=000010
+         15705723000 ch1 CS# high after 60 CK edges (0 data edges)
+         15705814000 ch0 CA=1ffc0006fffc WRITE MEM WRAPPED hw_addr=000034
+         15706019000 ch0 CS# high after 60 CK edges (0 data edges)
+         15706095000 ch0 CA=9ffc001dfffd  READ MEM WRAPPED hw_addr=0000ed
+         15706110000 ch1 CA=1ffc001dfffb WRITE MEM WRAPPED hw_addr=0000eb
+         15706301000 ch0 CS# high after 60 CK edges (0 data edges)
+         15706316000 ch1 CS# high after 60 CK edges (0 data edges)
+         15706673000 ch0 CA=1ffc0016fff8 WRITE MEM WRAPPED hw_addr=0000b0
+         15706688000 ch1 CA=1ffc0015fff9 WRITE MEM WRAPPED hw_addr=0000a9
+         15706879000 ch0 CS# high after 60 CK edges (0 data edges)
+         15706893000 ch1 CS# high after 60 CK edges (0 data edges)
+         15706969000 ch1 CA=1ffc0012ffff WRITE MEM WRAPPED hw_addr=000097
+         15707175000 ch1 CS# high after 60 CK edges (0 data edges)
+         15707251000 ch0 CA=9ffc000efffb  READ MEM WRAPPED hw_addr=000073
+         15707456000 ch0 CS# high after 60 CK edges (0 data edges)
+         15707547000 ch1 CA=1ffc0008fff8 WRITE MEM WRAPPED hw_addr=000040
+         15707753000 ch1 CS# high after 60 CK edges (0 data edges)
+         15707829000 ch1 CA=1ffc0017fffa WRITE MEM WRAPPED hw_addr=0000ba
+         15707829000 ch0 CA=1ffc0015fffa WRITE MEM WRAPPED hw_addr=0000aa
+         15708034000 ch1 CS# high after 60 CK edges (0 data edges)
+         15708034000 ch0 CS# high after 60 CK edges (0 data edges)
+         15708110000 ch1 CA=1ffc0018fff8 WRITE MEM WRAPPED hw_addr=0000c0
+         15708110000 ch0 CA=9ffc0010fffc  READ MEM WRAPPED hw_addr=000084
+         15708316000 ch1 CS# high after 60 CK edges (0 data edges)
+         15708316000 ch0 CS# high after 60 CK edges (0 data edges)
+         15708599000 ch1 CA=9ffc001dfff9  READ MEM WRAPPED hw_addr=0000e9
+         15708688000 ch0 CA=9ffc000efffd  READ MEM WRAPPED hw_addr=000075
+         15708805000 ch1 CS# high after 60 CK edges (0 data edges)
+         15708894000 ch0 CS# high after 60 CK edges (0 data edges)
+         15708970000 ch0 CA=9ffc001dffff  READ MEM WRAPPED hw_addr=0000ef
+         15709175000 ch0 CS# high after 60 CK edges (0 data edges)
+         15709177000 ch1 CA=9ffc0011fffb  READ MEM WRAPPED hw_addr=00008b
+         15709251000 ch0 CA=9ffc0010fffa  READ MEM WRAPPED hw_addr=000082
+         15709383000 ch1 CS# high after 60 CK edges (0 data edges)
+         15709457000 ch0 CS# high after 60 CK edges (0 data edges)
+         15709755000 ch1 CA=9ffc0014fff8  READ MEM WRAPPED hw_addr=0000a0
+         15709829000 ch0 CA=1ffc0000fff9 WRITE MEM WRAPPED hw_addr=000001
+         15709960000 ch1 CS# high after 60 CK edges (0 data edges)
+         15710034000 ch0 CS# high after 60 CK edges (0 data edges)
+         15710110000 ch0 CA=1ffc0012fffa WRITE MEM WRAPPED hw_addr=000092
+         15710316000 ch0 CS# high after 60 CK edges (0 data edges)
+         15710392000 ch0 CA=9ffc001cfffb  READ MEM WRAPPED hw_addr=0000e3
+         15710496000 ch1 CA=1ffc0006fff8 WRITE MEM WRAPPED hw_addr=000030
+         15710597000 ch0 CS# high after 60 CK edges (0 data edges)
+         15710673000 ch0 CA=1ffc001afffe WRITE MEM WRAPPED hw_addr=0000d6
+         15710701000 ch1 CS# high after 60 CK edges (0 data edges)
+         15710879000 ch0 CS# high after 60 CK edges (0 data edges)
+         15710955000 ch0 CA=1ffc000efff8 WRITE MEM WRAPPED hw_addr=000070
+         15711073000 ch1 CA=9ffc0002fff8  READ MEM WRAPPED hw_addr=000010
+         15711160000 ch0 CS# high after 60 CK edges (0 data edges)
+         15711279000 ch1 CS# high after 60 CK edges (0 data edges)
+         15711607000 ch0 CA=9ffc000cfff9  READ MEM WRAPPED hw_addr=000061
+         15711651000 ch1 CA=9ffc0008fffa  READ MEM WRAPPED hw_addr=000042
+         15711812000 ch0 CS# high after 60 CK edges (0 data edges)
+         15711857000 ch1 CS# high after 60 CK edges (0 data edges)
+         15711933000 ch1 CA=1ffc0018fffe WRITE MEM WRAPPED hw_addr=0000c6
+         15712138000 ch1 CS# high after 60 CK edges (0 data edges)
+         15712185000 ch0 CA=9ffc0018fff9  READ MEM WRAPPED hw_addr=0000c1
+         15712390000 ch0 CS# high after 60 CK edges (0 data edges)
+         15712466000 ch0 CA=9ffc000afff8  READ MEM WRAPPED hw_addr=000050
+         15712511000 ch1 CA=1ffc0004ffff WRITE MEM WRAPPED hw_addr=000027
+         15712672000 ch0 CS# high after 60 CK edges (0 data edges)
+         15712716000 ch1 CS# high after 60 CK edges (0 data edges)
+         15712748000 ch0 CA=9ffc0011fffd  READ MEM WRAPPED hw_addr=00008d
+         15712792000 ch1 CA=1ffc0006fffb WRITE MEM WRAPPED hw_addr=000033
+         15712953000 ch0 CS# high after 60 CK edges (0 data edges)
+         15712998000 ch1 CS# high after 60 CK edges (0 data edges)
+         15713029000 ch0 CA=1ffc0004fff9 WRITE MEM WRAPPED hw_addr=000021
+         15713235000 ch0 CS# high after 60 CK edges (0 data edges)
+         15713311000 ch0 CA=9ffc0016fffb  READ MEM WRAPPED hw_addr=0000b3
+         15713370000 ch1 CA=9ffc0013fff8  READ MEM WRAPPED hw_addr=000098
+         15713516000 ch0 CS# high after 60 CK edges (0 data edges)
+         15713576000 ch1 CS# high after 60 CK edges (0 data edges)
+         15713592000 ch0 CA=1ffc0014fffe WRITE MEM WRAPPED hw_addr=0000a6
+         15713651000 ch1 CA=9ffc001cfff8  READ MEM WRAPPED hw_addr=0000e0
+         15713798000 ch0 CS# high after 60 CK edges (0 data edges)
+         15713857000 ch1 CS# high after 60 CK edges (0 data edges)
+         15713963000 ch1 CA=1ffc0014fffe WRITE MEM WRAPPED hw_addr=0000a6
+         15714168000 ch1 CS# high after 60 CK edges (0 data edges)
+         15714170000 ch0 CA=1ffc0012ffff WRITE MEM WRAPPED hw_addr=000097
+         15714244000 ch1 CA=1ffc001afffa WRITE MEM WRAPPED hw_addr=0000d2
+         15714376000 ch0 CS# high after 60 CK edges (0 data edges)
+         15714450000 ch1 CS# high after 60 CK edges (0 data edges)
+         15714451000 ch0 CA=9ffc0017fffd  READ MEM WRAPPED hw_addr=0000bd
+         15714526000 ch1 CA=9ffc000afffb  READ MEM WRAPPED hw_addr=000053
+         15714657000 ch0 CS# high after 60 CK edges (0 data edges)
+         15714731000 ch1 CS# high after 60 CK edges (0 data edges)
+         15715029000 ch0 CA=9ffc000cfff8  READ MEM WRAPPED hw_addr=000060
+         15715103000 ch1 CA=9ffc0013ffff  READ MEM WRAPPED hw_addr=00009f
+         15715235000 ch0 CS# high after 60 CK edges (0 data edges)
+         15715309000 ch1 CS# high after 60 CK edges (0 data edges)
+         15715607000 ch0 CA=1ffc001efffa WRITE MEM WRAPPED hw_addr=0000f2
+         15715681000 ch1 CA=9ffc000ffff8  READ MEM WRAPPED hw_addr=000078
+         15715813000 ch0 CS# high after 60 CK edges (0 data edges)
+         15715887000 ch1 CS# high after 60 CK edges (0 data edges)
+         15715889000 ch0 CA=1ffc001fffff WRITE MEM WRAPPED hw_addr=0000ff
+         15716094000 ch0 CS# high after 60 CK edges (0 data edges)
+         15716259000 ch1 CA=1ffc0010fff8 WRITE MEM WRAPPED hw_addr=000080
+         15716465000 ch1 CS# high after 60 CK edges (0 data edges)
+         15716466000 ch0 CA=1ffc0017fff9 WRITE MEM WRAPPED hw_addr=0000b9
+         15716672000 ch0 CS# high after 60 CK edges (0 data edges)
+         15716748000 ch0 CA=9ffc0012fff8  READ MEM WRAPPED hw_addr=000090
+         15716852000 ch1 CA=1ffc0004fff8 WRITE MEM WRAPPED hw_addr=000020
+         15716954000 ch0 CS# high after 60 CK edges (0 data edges)
+         15717057000 ch1 CS# high after 60 CK edges (0 data edges)
+         15717326000 ch0 CA=1ffc000afff8 WRITE MEM WRAPPED hw_addr=000050
+         15717430000 ch1 CA=9ffc0002fffb  READ MEM WRAPPED hw_addr=000013
+         15717531000 ch0 CS# high after 60 CK edges (0 data edges)
+         15717635000 ch1 CS# high after 60 CK edges (0 data edges)
+         15717711000 ch1 CA=9ffc001ffff8  READ MEM WRAPPED hw_addr=0000f8
+         15717904000 ch0 CA=1ffc0012fff8 WRITE MEM WRAPPED hw_addr=000090
+         15717917000 ch1 CS# high after 60 CK edges (0 data edges)
+         15717993000 ch1 CA=1ffc000affff WRITE MEM WRAPPED hw_addr=000057
+         15718109000 ch0 CS# high after 60 CK edges (0 data edges)
+         15718198000 ch1 CS# high after 60 CK edges (0 data edges)
+         15718570000 ch1 CA=9ffc000dffff  READ MEM WRAPPED hw_addr=00006f
+         15718585000 ch0 CA=9ffc0011fffb  READ MEM WRAPPED hw_addr=00008b
+         15718776000 ch1 CS# high after 60 CK edges (0 data edges)
+         15718791000 ch0 CS# high after 60 CK edges (0 data edges)
+         15719148000 ch1 CA=9ffc0011fff8  READ MEM WRAPPED hw_addr=000088
+         15719163000 ch0 CA=9ffc000efffb  READ MEM WRAPPED hw_addr=000073
+         15719354000 ch1 CS# high after 60 CK edges (0 data edges)
+         15719369000 ch0 CS# high after 60 CK edges (0 data edges)
+         15719430000 ch1 CA=9ffc0010fff8  READ MEM WRAPPED hw_addr=000080
+         15719444000 ch0 CA=1ffc0012fffd WRITE MEM WRAPPED hw_addr=000095
+         15719635000 ch1 CS# high after 60 CK edges (0 data edges)
+         15719650000 ch0 CS# high after 60 CK edges (0 data edges)
+         15719726000 ch0 CA=9ffc0004fff8  READ MEM WRAPPED hw_addr=000020
+         15719932000 ch0 CS# high after 60 CK edges (0 data edges)
+         15720007000 ch1 CA=9ffc0006fff8  READ MEM WRAPPED hw_addr=000030
+         15720213000 ch1 CS# high after 60 CK edges (0 data edges)
+         15720526000 ch0 CA=1ffc000afff8 WRITE MEM WRAPPED hw_addr=000050
+         15720585000 ch1 CA=9ffc0004fff8  READ MEM WRAPPED hw_addr=000020
+         15720732000 ch0 CS# high after 60 CK edges (0 data edges)
+         15720791000 ch1 CS# high after 60 CK edges (0 data edges)
+         15720808000 ch0 CA=1ffc0004fff9 WRITE MEM WRAPPED hw_addr=000021
+         15720985000 ch1 CA=1ffc0016fff8 WRITE MEM WRAPPED hw_addr=0000b0
+         15721013000 ch0 CS# high after 60 CK edges (0 data edges)
+         15721089000 ch0 CA=9ffc0005fffd  READ MEM WRAPPED hw_addr=00002d
+         15721191000 ch1 CS# high after 60 CK edges (0 data edges)
+         15721295000 ch0 CS# high after 60 CK edges (0 data edges)
+         15721563000 ch1 CA=1ffc0002fffb WRITE MEM WRAPPED hw_addr=000013
+         15721667000 ch0 CA=1ffc0004fff9 WRITE MEM WRAPPED hw_addr=000021
+         15721769000 ch1 CS# high after 60 CK edges (0 data edges)
+         15721845000 ch1 CA=9ffc001dffff  READ MEM WRAPPED hw_addr=0000ef
+         15721872000 ch0 CS# high after 60 CK edges (0 data edges)
+         15721948000 ch0 CA=9ffc0003ffff  READ MEM WRAPPED hw_addr=00001f
+         15722050000 ch1 CS# high after 60 CK edges (0 data edges)
+         15722126000 ch1 CA=9ffc000afffc  READ MEM WRAPPED hw_addr=000054
+         15722154000 ch0 CS# high after 60 CK edges (0 data edges)
+         15722230000 ch0 CA=1ffc0012fffa WRITE MEM WRAPPED hw_addr=000092
+         15722332000 ch1 CS# high after 60 CK edges (0 data edges)
+         15722435000 ch0 CS# high after 60 CK edges (0 data edges)
+         15722511000 ch0 CA=9ffc0008fffb  READ MEM WRAPPED hw_addr=000043
+         15722704000 ch1 CA=9ffc0002fff8  READ MEM WRAPPED hw_addr=000010
+         15722717000 ch0 CS# high after 60 CK edges (0 data edges)
+         15722910000 ch1 CS# high after 60 CK edges (0 data edges)
+         15722986000 ch1 CA=9ffc000cfffd  READ MEM WRAPPED hw_addr=000065
+         15723089000 ch0 CA=1ffc0016fff8 WRITE MEM WRAPPED hw_addr=0000b0
+         15723191000 ch1 CS# high after 60 CK edges (0 data edges)
+         15723295000 ch0 CS# high after 60 CK edges (0 data edges)
+         15723563000 ch1 CA=9ffc0018fffa  READ MEM WRAPPED hw_addr=0000c2
+         15723667000 ch0 CA=9ffc000afff8  READ MEM WRAPPED hw_addr=000050
+         15723769000 ch1 CS# high after 60 CK edges (0 data edges)
+         15723873000 ch0 CS# high after 60 CK edges (0 data edges)
+         15723949000 ch0 CA=9ffc0006fffc  READ MEM WRAPPED hw_addr=000034
+         15724141000 ch1 CA=1ffc0010fffb WRITE MEM WRAPPED hw_addr=000083
+         15724154000 ch0 CS# high after 60 CK edges (0 data edges)
+         15724347000 ch1 CS# high after 60 CK edges (0 data edges)
+         15724423000 ch1 CA=1ffc0002fffd WRITE MEM WRAPPED hw_addr=000015
+         15724526000 ch0 CA=1ffc0002fff8 WRITE MEM WRAPPED hw_addr=000010
+         15724628000 ch1 CS# high after 60 CK edges (0 data edges)
+         15724732000 ch0 CS# high after 60 CK edges (0 data edges)
+         15724897000 ch0 CA=1ffc001dfff9 WRITE MEM WRAPPED hw_addr=0000e9
+         15725000000 ch1 CA=9ffc001fffff  READ MEM WRAPPED hw_addr=0000ff
+         15725102000 ch0 CS# high after 60 CK edges (0 data edges)
+         15725178000 ch0 CA=1ffc0011fffc WRITE MEM WRAPPED hw_addr=00008c
+         15725206000 ch1 CS# high after 60 CK edges (0 data edges)
+         15725282000 ch1 CA=1ffc0000fffe WRITE MEM WRAPPED hw_addr=000006
+         15725384000 ch0 CS# high after 60 CK edges (0 data edges)
+         15725488000 ch1 CS# high after 60 CK edges (0 data edges)
+         15725563000 ch1 CA=1ffc0002fff8 WRITE MEM WRAPPED hw_addr=000010
+         15725756000 ch0 CA=9ffc000ffffb  READ MEM WRAPPED hw_addr=00007b
+         15725769000 ch1 CS# high after 60 CK edges (0 data edges)
+         15725962000 ch0 CS# high after 60 CK edges (0 data edges)
+         15726141000 ch1 CA=9ffc0019ffff  READ MEM WRAPPED hw_addr=0000cf
+         15726334000 ch0 CA=1ffc000afffc WRITE MEM WRAPPED hw_addr=000054
+         15726347000 ch1 CS# high after 60 CK edges (0 data edges)
+         15726540000 ch0 CS# high after 60 CK edges (0 data edges)
+         15726615000 ch0 CA=9ffc000bffff  READ MEM WRAPPED hw_addr=00005f
+         15726719000 ch1 CA=1ffc001efffe WRITE MEM WRAPPED hw_addr=0000f6
+         15726821000 ch0 CS# high after 60 CK edges (0 data edges)
+         15726925000 ch1 CS# high after 60 CK edges (0 data edges)
+         15727193000 ch0 CA=1ffc001bffff WRITE MEM WRAPPED hw_addr=0000df
+         15727297000 ch1 CA=9ffc0013fffc  READ MEM WRAPPED hw_addr=00009c
+         15727399000 ch0 CS# high after 60 CK edges (0 data edges)
+         15727475000 ch0 CA=1ffc000cfff8 WRITE MEM WRAPPED hw_addr=000060
+         15727503000 ch1 CS# high after 60 CK edges (0 data edges)
+         15727680000 ch0 CS# high after 60 CK edges (0 data edges)
+         15727875000 ch1 CA=1ffc0006fff8 WRITE MEM WRAPPED hw_addr=000030
+         15728080000 ch1 CS# high after 60 CK edges (0 data edges)
+         15728097000 ch0 CA=9ffc0011ffff  READ MEM WRAPPED hw_addr=00008f
+         15728156000 ch1 CA=1ffc001affff WRITE MEM WRAPPED hw_addr=0000d7
+         15728303000 ch0 CS# high after 60 CK edges (0 data edges)
+         15728362000 ch1 CS# high after 60 CK edges (0 data edges)
+         15728379000 ch0 CA=1ffc0012fffb WRITE MEM WRAPPED hw_addr=000093
+         15728438000 ch1 CA=9ffc000efff8  READ MEM WRAPPED hw_addr=000070
+         15728584000 ch0 CS# high after 60 CK edges (0 data edges)
+         15728643000 ch1 CS# high after 60 CK edges (0 data edges)
+         15728660000 ch0 CA=9ffc0002fff8  READ MEM WRAPPED hw_addr=000010
+         15728866000 ch0 CS# high after 60 CK edges (0 data edges)
+         15729016000 ch1 CA=9ffc0007fffd  READ MEM WRAPPED hw_addr=00003d
+         15729221000 ch1 CS# high after 60 CK edges (0 data edges)
+         15729238000 ch0 CA=9ffc001bfffc  READ MEM WRAPPED hw_addr=0000dc
+         15729443000 ch0 CS# high after 60 CK edges (0 data edges)
+         15729593000 ch1 CA=1ffc0015fffd WRITE MEM WRAPPED hw_addr=0000ad
+         15729799000 ch1 CS# high after 60 CK edges (0 data edges)
+         15729816000 ch0 CA=9ffc001dfffa  READ MEM WRAPPED hw_addr=0000ea
+         15729875000 ch1 CA=9ffc001cfff8  READ MEM WRAPPED hw_addr=0000e0
+         15730021000 ch0 CS# high after 60 CK edges (0 data edges)
+         15730081000 ch1 CS# high after 60 CK edges (0 data edges)
+         15730097000 ch0 CA=9ffc0017fff9  READ MEM WRAPPED hw_addr=0000b9
+         15730303000 ch0 CS# high after 60 CK edges (0 data edges)
+         15730453000 ch1 CA=9ffc0006fffb  READ MEM WRAPPED hw_addr=000033
+         15730658000 ch1 CS# high after 60 CK edges (0 data edges)
+         15730675000 ch0 CA=9ffc0000fff8  READ MEM WRAPPED hw_addr=000000
+         15730734000 ch1 CA=1ffc0007fffe WRITE MEM WRAPPED hw_addr=00003e
+         15730881000 ch0 CS# high after 60 CK edges (0 data edges)
+         15730940000 ch1 CS# high after 60 CK edges (0 data edges)
+         15731312000 ch1 CA=1ffc0002fff9 WRITE MEM WRAPPED hw_addr=000011
+         15731445000 ch0 CA=1ffc000afffe WRITE MEM WRAPPED hw_addr=000056
+         15731518000 ch1 CS# high after 60 CK edges (0 data edges)
+         15731651000 ch0 CS# high after 60 CK edges (0 data edges)
+         15731727000 ch0 CA=1ffc0013fffd WRITE MEM WRAPPED hw_addr=00009d
+         15731890000 ch1 CA=9ffc0006fffc  READ MEM WRAPPED hw_addr=000034
+         15731933000 ch0 CS# high after 60 CK edges (0 data edges)
+         15732008000 ch0 CA=1ffc001affff WRITE MEM WRAPPED hw_addr=0000d7
+         15732096000 ch1 CS# high after 60 CK edges (0 data edges)
+         15732214000 ch0 CS# high after 60 CK edges (0 data edges)
+         15732468000 ch1 CA=9ffc0013fff8  READ MEM WRAPPED hw_addr=000098
+         15732586000 ch0 CA=1ffc001ffffb WRITE MEM WRAPPED hw_addr=0000fb
+         15732673000 ch1 CS# high after 60 CK edges (0 data edges)
+         15732792000 ch0 CS# high after 60 CK edges (0 data edges)
+         15733046000 ch1 CA=1ffc0019fff9 WRITE MEM WRAPPED hw_addr=0000c9
+         15733164000 ch0 CA=9ffc000afff8  READ MEM WRAPPED hw_addr=000050
+         15733251000 ch1 CS# high after 60 CK edges (0 data edges)
+         15733370000 ch0 CS# high after 60 CK edges (0 data edges)
+         15733446000 ch0 CA=1ffc0006fff8 WRITE MEM WRAPPED hw_addr=000030
+         15733623000 ch1 CA=9ffc001dfffe  READ MEM WRAPPED hw_addr=0000ee
+         15733651000 ch0 CS# high after 60 CK edges (0 data edges)
+         15733727000 ch0 CA=1ffc0013fffe WRITE MEM WRAPPED hw_addr=00009e
+         15733829000 ch1 CS# high after 60 CK edges (0 data edges)
+         15733905000 ch1 CA=9ffc001efffa  READ MEM WRAPPED hw_addr=0000f2
+         15733933000 ch0 CS# high after 60 CK edges (0 data edges)
+         15734110000 ch1 CS# high after 60 CK edges (0 data edges)
+         15734186000 ch1 CA=9ffc001efffb  READ MEM WRAPPED hw_addr=0000f3
+         15734305000 ch0 CA=1ffc0000fff9 WRITE MEM WRAPPED hw_addr=000001
+         15734392000 ch1 CS# high after 60 CK edges (0 data edges)
+         15734511000 ch0 CS# high after 60 CK edges (0 data edges)
+         15734764000 ch1 CA=9ffc001cfffa  READ MEM WRAPPED hw_addr=0000e2
+         15734883000 ch0 CA=9ffc001afff8  READ MEM WRAPPED hw_addr=0000d0
+         15734970000 ch1 CS# high after 60 CK edges (0 data edges)
+         15735088000 ch0 CS# high after 60 CK edges (0 data edges)
+         15735342000 ch1 CA=1ffc0006fffa WRITE MEM WRAPPED hw_addr=000032
+         15735461000 ch0 CA=9ffc000cfffd  READ MEM WRAPPED hw_addr=000065
+         15735548000 ch1 CS# high after 60 CK edges (0 data edges)
+         15735624000 ch1 CA=9ffc0019ffff  READ MEM WRAPPED hw_addr=0000cf
+         15735666000 ch0 CS# high after 60 CK edges (0 data edges)
+         15735742000 ch0 CA=1ffc000cfffe WRITE MEM WRAPPED hw_addr=000066
+         15735829000 ch1 CS# high after 60 CK edges (0 data edges)
+         15735905000 ch1 CA=9ffc0008fff8  READ MEM WRAPPED hw_addr=000040
+         15735948000 ch0 CS# high after 60 CK edges (0 data edges)
+         15736111000 ch1 CS# high after 60 CK edges (0 data edges)
+         15736187000 ch1 CA=9ffc0008fffa  READ MEM WRAPPED hw_addr=000042
+         15736320000 ch0 CA=9ffc0007fffd  READ MEM WRAPPED hw_addr=00003d
+         15736392000 ch1 CS# high after 60 CK edges (0 data edges)
+         15736525000 ch0 CS# high after 60 CK edges (0 data edges)
+         15736601000 ch0 CA=1ffc0014fffb WRITE MEM WRAPPED hw_addr=0000a3
+         15736764000 ch1 CA=9ffc001afffd  READ MEM WRAPPED hw_addr=0000d5
+         15736807000 ch0 CS# high after 60 CK edges (0 data edges)
+         15736883000 ch0 CA=1ffc000dfff8 WRITE MEM WRAPPED hw_addr=000068
+         15736970000 ch1 CS# high after 60 CK edges (0 data edges)
+         15737046000 ch1 CA=9ffc000afffb  READ MEM WRAPPED hw_addr=000053
+         15737088000 ch0 CS# high after 60 CK edges (0 data edges)
+         15737251000 ch1 CS# high after 60 CK edges (0 data edges)
+         15737461000 ch0 CA=9ffc0013fffa  READ MEM WRAPPED hw_addr=00009a
+         15737624000 ch1 CA=1ffc0008fff8 WRITE MEM WRAPPED hw_addr=000040
+         15737666000 ch0 CS# high after 60 CK edges (0 data edges)
+         15737829000 ch1 CS# high after 60 CK edges (0 data edges)
+         15737905000 ch1 CA=1ffc0008ffff WRITE MEM WRAPPED hw_addr=000047
+         15738039000 ch0 CA=9ffc0005fffe  READ MEM WRAPPED hw_addr=00002e
+         15738111000 ch1 CS# high after 60 CK edges (0 data edges)
+         15738187000 ch1 CA=9ffc000ffffb  READ MEM WRAPPED hw_addr=00007b
+         15738244000 ch0 CS# high after 60 CK edges (0 data edges)
+         15738320000 ch0 CA=9ffc000efff8  READ MEM WRAPPED hw_addr=000070
+         15738392000 ch1 CS# high after 60 CK edges (0 data edges)
+         15738468000 ch1 CA=1ffc001efffc WRITE MEM WRAPPED hw_addr=0000f4
+         15738526000 ch0 CS# high after 60 CK edges (0 data edges)
+         15738674000 ch1 CS# high after 60 CK edges (0 data edges)
+         15738750000 ch0 CA=9ffc0006fff8  READ MEM WRAPPED hw_addr=000030
+         15738955000 ch0 CS# high after 60 CK edges (0 data edges)
+         15739046000 ch1 CA=9ffc000efff9  READ MEM WRAPPED hw_addr=000071
+         15739252000 ch1 CS# high after 60 CK edges (0 data edges)
+         15739328000 ch1 CA=1ffc0002fffc WRITE MEM WRAPPED hw_addr=000014
+         15739520000 ch0 CA=1ffc001efff8 WRITE MEM WRAPPED hw_addr=0000f0
+         15739533000 ch1 CS# high after 60 CK edges (0 data edges)
+         15739609000 ch1 CA=1ffc000cfff8 WRITE MEM WRAPPED hw_addr=000060
+         15739726000 ch0 CS# high after 60 CK edges (0 data edges)
+         15739815000 ch1 CS# high after 60 CK edges (0 data edges)
+         15739891000 ch1 CA=1ffc0012fffd WRITE MEM WRAPPED hw_addr=000095
+         15740096000 ch1 CS# high after 60 CK edges (0 data edges)
+         15740261000 ch0 CA=9ffc0006fff8  READ MEM WRAPPED hw_addr=000030
+         15740467000 ch0 CS# high after 60 CK edges (0 data edges)
+         15740468000 ch1 CA=1ffc0000fffe WRITE MEM WRAPPED hw_addr=000006
+         15740674000 ch1 CS# high after 60 CK edges (0 data edges)
+         15740750000 ch1 CA=9ffc0014fff8  READ MEM WRAPPED hw_addr=0000a0
+         15740839000 ch0 CA=1ffc0010fff8 WRITE MEM WRAPPED hw_addr=000080
+         15740955000 ch1 CS# high after 60 CK edges (0 data edges)
+         15741044000 ch0 CS# high after 60 CK edges (0 data edges)
+         15741120000 ch0 CA=9ffc0014fffa  READ MEM WRAPPED hw_addr=0000a2
+         15741326000 ch0 CS# high after 60 CK edges (0 data edges)
+         15741328000 ch1 CA=1ffc0019fff8 WRITE MEM WRAPPED hw_addr=0000c8
+         15741533000 ch1 CS# high after 60 CK edges (0 data edges)
+         15741609000 ch1 CA=1ffc0003fffe WRITE MEM WRAPPED hw_addr=00001e
+         15741698000 ch0 CA=1ffc000afffa WRITE MEM WRAPPED hw_addr=000052
+         15741815000 ch1 CS# high after 60 CK edges (0 data edges)
+         15741904000 ch0 CS# high after 60 CK edges (0 data edges)
+         15741980000 ch0 CA=1ffc0010fff8 WRITE MEM WRAPPED hw_addr=000080
+         15742185000 ch0 CS# high after 60 CK edges (0 data edges)
+         15742187000 ch1 CA=1ffc0001fffb WRITE MEM WRAPPED hw_addr=00000b
+         15742393000 ch1 CS# high after 60 CK edges (0 data edges)
+         15742557000 ch0 CA=1ffc001efffd WRITE MEM WRAPPED hw_addr=0000f5
+         15742763000 ch0 CS# high after 60 CK edges (0 data edges)
+         15742765000 ch1 CA=1ffc0015fffd WRITE MEM WRAPPED hw_addr=0000ad
+         15742970000 ch1 CS# high after 60 CK edges (0 data edges)
+         15743135000 ch0 CA=1ffc0006fff8 WRITE MEM WRAPPED hw_addr=000030
+         15743341000 ch0 CS# high after 60 CK edges (0 data edges)
+         15743343000 ch1 CA=9ffc000ffffc  READ MEM WRAPPED hw_addr=00007c
+         15743417000 ch0 CA=9ffc0007fffa  READ MEM WRAPPED hw_addr=00003a
+         15743548000 ch1 CS# high after 60 CK edges (0 data edges)
+         15743622000 ch0 CS# high after 60 CK edges (0 data edges)
+         15743624000 ch1 CA=1ffc0003fff9 WRITE MEM WRAPPED hw_addr=000019
+         15743698000 ch0 CA=9ffc0001fff9  READ MEM WRAPPED hw_addr=000009
+         15743830000 ch1 CS# high after 60 CK edges (0 data edges)
+         15743904000 ch0 CS# high after 60 CK edges (0 data edges)
+         15743980000 ch0 CA=1ffc0015fffb WRITE MEM WRAPPED hw_addr=0000ab
+         15744185000 ch0 CS# high after 60 CK edges (0 data edges)
+         15744202000 ch1 CA=1ffc0006fff8 WRITE MEM WRAPPED hw_addr=000030
+         15744261000 ch0 CA=1ffc0004fffc WRITE MEM WRAPPED hw_addr=000024
+         15744408000 ch1 CS# high after 60 CK edges (0 data edges)
+         15744467000 ch0 CS# high after 60 CK edges (0 data edges)
+         15744661000 ch1 CA=9ffc000ffffb  READ MEM WRAPPED hw_addr=00007b
+         15744839000 ch0 CA=1ffc0014fff8 WRITE MEM WRAPPED hw_addr=0000a0
+         15744867000 ch1 CS# high after 60 CK edges (0 data edges)
+         15745045000 ch0 CS# high after 60 CK edges (0 data edges)
+         15745239000 ch1 CA=1ffc0000fff8 WRITE MEM WRAPPED hw_addr=000000
+         15745328000 ch0 CA=9ffc000afff8  READ MEM WRAPPED hw_addr=000050
+         15745445000 ch1 CS# high after 60 CK edges (0 data edges)
+         15745521000 ch1 CA=9ffc0018fff9  READ MEM WRAPPED hw_addr=0000c1
+         15745534000 ch0 CS# high after 60 CK edges (0 data edges)
+         15745610000 ch0 CA=1ffc0002fffc WRITE MEM WRAPPED hw_addr=000014
+         15745726000 ch1 CS# high after 60 CK edges (0 data edges)
+         15745802000 ch1 CA=1ffc001ffffd WRITE MEM WRAPPED hw_addr=0000fd
+         15745815000 ch0 CS# high after 60 CK edges (0 data edges)
+         15745891000 ch0 CA=1ffc0013fffa WRITE MEM WRAPPED hw_addr=00009a
+         15746008000 ch1 CS# high after 60 CK edges (0 data edges)
+         15746097000 ch0 CS# high after 60 CK edges (0 data edges)
+         15746380000 ch1 CA=1ffc000cfff8 WRITE MEM WRAPPED hw_addr=000060
+         15746469000 ch0 CA=9ffc0019fffa  READ MEM WRAPPED hw_addr=0000ca
+         15746586000 ch1 CS# high after 60 CK edges (0 data edges)
+         15746661000 ch1 CA=9ffc001effff  READ MEM WRAPPED hw_addr=0000f7
+         15746674000 ch0 CS# high after 60 CK edges (0 data edges)
+         15746867000 ch1 CS# high after 60 CK edges (0 data edges)
+         15747047000 ch0 CA=1ffc001dfffb WRITE MEM WRAPPED hw_addr=0000eb
+         15747239000 ch1 CA=9ffc0007ffff  READ MEM WRAPPED hw_addr=00003f
+         15747252000 ch0 CS# high after 60 CK edges (0 data edges)
+         15747328000 ch0 CA=1ffc0014fff8 WRITE MEM WRAPPED hw_addr=0000a0
+         15747445000 ch1 CS# high after 60 CK edges (0 data edges)
+         15747534000 ch0 CS# high after 60 CK edges (0 data edges)
+         15747817000 ch1 CA=1ffc0014fff8 WRITE MEM WRAPPED hw_addr=0000a0
+         15747906000 ch0 CA=1ffc0005ffff WRITE MEM WRAPPED hw_addr=00002f
+         15748023000 ch1 CS# high after 60 CK edges (0 data edges)
+         15748112000 ch0 CS# high after 60 CK edges (0 data edges)
+         15748395000 ch1 CA=9ffc0006ffff  READ MEM WRAPPED hw_addr=000037
+         15748484000 ch0 CA=1ffc0005fffe WRITE MEM WRAPPED hw_addr=00002e
+         15748601000 ch1 CS# high after 60 CK edges (0 data edges)
+         15748676000 ch1 CA=9ffc0009fffc  READ MEM WRAPPED hw_addr=00004c
+         15748689000 ch0 CS# high after 60 CK edges (0 data edges)
+         15748765000 ch0 CA=9ffc0019fff9  READ MEM WRAPPED hw_addr=0000c9
+         15748882000 ch1 CS# high after 60 CK edges (0 data edges)
+         15748958000 ch1 CA=1ffc0008fff8 WRITE MEM WRAPPED hw_addr=000040
+         15748971000 ch0 CS# high after 60 CK edges (0 data edges)
+         15749047000 ch0 CA=1ffc000cffff WRITE MEM WRAPPED hw_addr=000067
+         15749164000 ch1 CS# high after 60 CK edges (0 data edges)
+         15749239000 ch1 CA=9ffc0006fffa  READ MEM WRAPPED hw_addr=000032
+         15749252000 ch0 CS# high after 60 CK edges (0 data edges)
+         15749445000 ch1 CS# high after 60 CK edges (0 data edges)
+         15749521000 ch1 CA=9ffc0018fffc  READ MEM WRAPPED hw_addr=0000c4
+         15749625000 ch0 CA=9ffc000ffffb  READ MEM WRAPPED hw_addr=00007b
+         15749727000 ch1 CS# high after 60 CK edges (0 data edges)
+         15749802000 ch1 CA=1ffc001dfffb WRITE MEM WRAPPED hw_addr=0000eb
+         15749830000 ch0 CS# high after 60 CK edges (0 data edges)
+         15749906000 ch0 CA=1ffc000dfff9 WRITE MEM WRAPPED hw_addr=000069
+         15750008000 ch1 CS# high after 60 CK edges (0 data edges)
+         15750112000 ch0 CS# high after 60 CK edges (0 data edges)
+         15750188000 ch0 CA=9ffc001efff8  READ MEM WRAPPED hw_addr=0000f0
+         15750380000 ch1 CA=1ffc000efff9 WRITE MEM WRAPPED hw_addr=000071
+         15750393000 ch0 CS# high after 60 CK edges (0 data edges)
+         15750586000 ch1 CS# high after 60 CK edges (0 data edges)
+         15750766000 ch0 CA=9ffc0006fff8  READ MEM WRAPPED hw_addr=000030
+         15750958000 ch1 CA=1ffc000dfff8 WRITE MEM WRAPPED hw_addr=000068
+         15750971000 ch0 CS# high after 60 CK edges (0 data edges)
+         15751047000 ch0 CA=1ffc0019fffc WRITE MEM WRAPPED hw_addr=0000cc
+         15751164000 ch1 CS# high after 60 CK edges (0 data edges)
+         15751253000 ch0 CS# high after 60 CK edges (0 data edges)
+         15751536000 ch1 CA=9ffc000bfffd  READ MEM WRAPPED hw_addr=00005d
+         15751625000 ch0 CA=9ffc0012fffd  READ MEM WRAPPED hw_addr=000095
+         15751742000 ch1 CS# high after 60 CK edges (0 data edges)
+         15751830000 ch0 CS# high after 60 CK edges (0 data edges)
+         15752114000 ch1 CA=9ffc000cfffc  READ MEM WRAPPED hw_addr=000064
+         15752203000 ch0 CA=9ffc0000fff8  READ MEM WRAPPED hw_addr=000000
+         15752319000 ch1 CS# high after 60 CK edges (0 data edges)
+         15752408000 ch0 CS# high after 60 CK edges (0 data edges)
+         15752514000 ch0 CA=9ffc0015fffc  READ MEM WRAPPED hw_addr=0000ac
+         15752692000 ch1 CA=1ffc0005fffe WRITE MEM WRAPPED hw_addr=00002e
+         15752719000 ch0 CS# high after 60 CK edges (0 data edges)
+         15752795000 ch0 CA=9ffc0002fffd  READ MEM WRAPPED hw_addr=000015
+         15752897000 ch1 CS# high after 60 CK edges (0 data edges)
+         15753001000 ch0 CS# high after 60 CK edges (0 data edges)
+         15753269000 ch1 CA=1ffc0017fffb WRITE MEM WRAPPED hw_addr=0000bb
+         15753373000 ch0 CA=1ffc0016fff9 WRITE MEM WRAPPED hw_addr=0000b1
+         15753475000 ch1 CS# high after 60 CK edges (0 data edges)
+         15753551000 ch1 CA=1ffc0006fff9 WRITE MEM WRAPPED hw_addr=000031
+         15753579000 ch0 CS# high after 60 CK edges (0 data edges)
+         15753756000 ch1 CS# high after 60 CK edges (0 data edges)
+         15753951000 ch0 CA=9ffc000cfffe  READ MEM WRAPPED hw_addr=000066
+         15754129000 ch1 CA=1ffc0004fffd WRITE MEM WRAPPED hw_addr=000025
+         15754157000 ch0 CS# high after 60 CK edges (0 data edges)
+         15754232000 ch0 CA=1ffc0000ffff WRITE MEM WRAPPED hw_addr=000007
+         15754334000 ch1 CS# high after 60 CK edges (0 data edges)
+         15754438000 ch0 CS# high after 60 CK edges (0 data edges)
+         15754707000 ch1 CA=1ffc0008fffb WRITE MEM WRAPPED hw_addr=000043
+         15754810000 ch0 CA=1ffc0006fff8 WRITE MEM WRAPPED hw_addr=000030
+         15754912000 ch1 CS# high after 60 CK edges (0 data edges)
+         15755016000 ch0 CS# high after 60 CK edges (0 data edges)
+         15755284000 ch1 CA=1ffc000afff8 WRITE MEM WRAPPED hw_addr=000050
+         15755388000 ch0 CA=9ffc0011fffd  READ MEM WRAPPED hw_addr=00008d
+         15755490000 ch1 CS# high after 60 CK edges (0 data edges)
+         15755566000 ch1 CA=1ffc0009fffd WRITE MEM WRAPPED hw_addr=00004d
+         15755594000 ch0 CS# high after 60 CK edges (0 data edges)
+         15755771000 ch1 CS# high after 60 CK edges (0 data edges)
+         15755966000 ch0 CA=9ffc0008fffc  READ MEM WRAPPED hw_addr=000044
+         15756144000 ch1 CA=9ffc0009ffff  READ MEM WRAPPED hw_addr=00004f
+         15756172000 ch0 CS# high after 60 CK edges (0 data edges)
+         15756247000 ch0 CA=1ffc0011fffc WRITE MEM WRAPPED hw_addr=00008c
+         15756349000 ch1 CS# high after 60 CK edges (0 data edges)
+         15756425000 ch1 CA=1ffc0019fffb WRITE MEM WRAPPED hw_addr=0000cb
+         15756453000 ch0 CS# high after 60 CK edges (0 data edges)
+         15756631000 ch1 CS# high after 60 CK edges (0 data edges)
+         15756707000 ch1 CA=1ffc000afffc WRITE MEM WRAPPED hw_addr=000054
+         15756825000 ch0 CA=9ffc0014fffd  READ MEM WRAPPED hw_addr=0000a5
+         15756912000 ch1 CS# high after 60 CK edges (0 data edges)
+         15756988000 ch1 CA=1ffc0004fffd WRITE MEM WRAPPED hw_addr=000025
+         15757031000 ch0 CS# high after 60 CK edges (0 data edges)
+         15757194000 ch1 CS# high after 60 CK edges (0 data edges)
+         15757403000 ch0 CA=9ffc000efff8  READ MEM WRAPPED hw_addr=000070
+         15757566000 ch1 CA=1ffc0016fff9 WRITE MEM WRAPPED hw_addr=0000b1
+         15757609000 ch0 CS# high after 60 CK edges (0 data edges)
+         15757772000 ch1 CS# high after 60 CK edges (0 data edges)
+         15757848000 ch1 CA=9ffc0003fff8  READ MEM WRAPPED hw_addr=000018
+         15757981000 ch0 CA=9ffc0011ffff  READ MEM WRAPPED hw_addr=00008f
+         15758053000 ch1 CS# high after 60 CK edges (0 data edges)
+         15758186000 ch0 CS# high after 60 CK edges (0 data edges)
+         15758425000 ch1 CA=9ffc000cfff8  READ MEM WRAPPED hw_addr=000060
+         15758559000 ch0 CA=1ffc001cfffc WRITE MEM WRAPPED hw_addr=0000e4
+         15758631000 ch1 CS# high after 60 CK edges (0 data edges)
+         15758764000 ch0 CS# high after 60 CK edges (0 data edges)
+         15759003000 ch1 CA=9ffc000dfffa  READ MEM WRAPPED hw_addr=00006a
+         15759137000 ch0 CA=9ffc0017fff8  READ MEM WRAPPED hw_addr=0000b8
+         15759209000 ch1 CS# high after 60 CK edges (0 data edges)
+         15759285000 ch1 CA=9ffc001efffe  READ MEM WRAPPED hw_addr=0000f6
+         15759342000 ch0 CS# high after 60 CK edges (0 data edges)
+         15759490000 ch1 CS# high after 60 CK edges (0 data edges)
+         15759714000 ch0 CA=1ffc0018fffc WRITE MEM WRAPPED hw_addr=0000c4
+         15759863000 ch1 CA=1ffc0014ffff WRITE MEM WRAPPED hw_addr=0000a7
+         15759920000 ch0 CS# high after 60 CK edges (0 data edges)
+         15760068000 ch1 CS# high after 60 CK edges (0 data edges)
+         15760292000 ch0 CA=1ffc0016fff9 WRITE MEM WRAPPED hw_addr=0000b1
+         15760440000 ch1 CA=9ffc0003ffff  READ MEM WRAPPED hw_addr=00001f
+         15760498000 ch0 CS# high after 60 CK edges (0 data edges)
+         15760646000 ch1 CS# high after 60 CK edges (0 data edges)
+         15760870000 ch0 CA=9ffc0016fff8  READ MEM WRAPPED hw_addr=0000b0
+         15761018000 ch1 CA=1ffc0002fff9 WRITE MEM WRAPPED hw_addr=000011
+         15761076000 ch0 CS# high after 60 CK edges (0 data edges)
+         15761152000 ch0 CA=9ffc000afff9  READ MEM WRAPPED hw_addr=000051
+         15761224000 ch1 CS# high after 60 CK edges (0 data edges)
+         15761357000 ch0 CS# high after 60 CK edges (0 data edges)
+         15761433000 ch0 CA=1ffc000afff8 WRITE MEM WRAPPED hw_addr=000050
+         15761596000 ch1 CA=1ffc000ffff8 WRITE MEM WRAPPED hw_addr=000078
+         15761639000 ch0 CS# high after 60 CK edges (0 data edges)
+         15761802000 ch1 CS# high after 60 CK edges (0 data edges)
+         15761878000 ch1 CA=1ffc000bfffa WRITE MEM WRAPPED hw_addr=00005a
+         15762083000 ch1 CS# high after 60 CK edges (0 data edges)
+         15762233000 ch0 CA=9ffc000dfffe  READ MEM WRAPPED hw_addr=00006e
+         15762439000 ch0 CS# high after 60 CK edges (0 data edges)
+         15762455000 ch1 CA=9ffc0012fffc  READ MEM WRAPPED hw_addr=000094
+         15762661000 ch1 CS# high after 60 CK edges (0 data edges)
+         15762811000 ch0 CA=9ffc000afff8  READ MEM WRAPPED hw_addr=000050
+         15763016000 ch0 CS# high after 60 CK edges (0 data edges)
+         15763033000 ch1 CA=1ffc0005fffa WRITE MEM WRAPPED hw_addr=00002a
+         15763239000 ch1 CS# high after 60 CK edges (0 data edges)
+         15763389000 ch0 CA=1ffc000dfffb WRITE MEM WRAPPED hw_addr=00006b
+         15763594000 ch0 CS# high after 60 CK edges (0 data edges)
+         15763611000 ch1 CA=1ffc000afff8 WRITE MEM WRAPPED hw_addr=000050
+         15763670000 ch0 CA=9ffc001efff8  READ MEM WRAPPED hw_addr=0000f0
+         15763817000 ch1 CS# high after 60 CK edges (0 data edges)
+         15763876000 ch0 CS# high after 60 CK edges (0 data edges)
+         15763952000 ch0 CA=1ffc0012fff8 WRITE MEM WRAPPED hw_addr=000090
+         15764157000 ch0 CS# high after 60 CK edges (0 data edges)
+         15764189000 ch1 CA=1ffc0002fff8 WRITE MEM WRAPPED hw_addr=000010
+         15764394000 ch1 CS# high after 60 CK edges (0 data edges)
+         15764752000 ch0 CA=9ffc001dfff9  READ MEM WRAPPED hw_addr=0000e9
+         15764767000 ch1 CA=9ffc001cfffd  READ MEM WRAPPED hw_addr=0000e5
+         15764957000 ch0 CS# high after 60 CK edges (0 data edges)
+         15764972000 ch1 CS# high after 60 CK edges (0 data edges)
+         15765048000 ch1 CA=9ffc000affff  READ MEM WRAPPED hw_addr=000057
+         15765254000 ch1 CS# high after 60 CK edges (0 data edges)
+         15765330000 ch0 CA=9ffc000bfff8  READ MEM WRAPPED hw_addr=000058
+         15765535000 ch0 CS# high after 60 CK edges (0 data edges)
+         15765626000 ch1 CA=9ffc000cfffe  READ MEM WRAPPED hw_addr=000066
+         15765832000 ch1 CS# high after 60 CK edges (0 data edges)
+         15765907000 ch1 CA=1ffc000efffb WRITE MEM WRAPPED hw_addr=000073
+         15765907000 ch0 CA=9ffc0000fff8  READ MEM WRAPPED hw_addr=000000
+         15766113000 ch1 CS# high after 60 CK edges (0 data edges)
+         15766113000 ch0 CS# high after 60 CK edges (0 data edges)
+         15766189000 ch0 CA=9ffc0007fffa  READ MEM WRAPPED hw_addr=00003a
+         15766395000 ch0 CS# high after 60 CK edges (0 data edges)
+         15766485000 ch1 CA=9ffc0016fff8  READ MEM WRAPPED hw_addr=0000b0
+         15766691000 ch1 CS# high after 60 CK edges (0 data edges)
+         15766767000 ch0 CA=9ffc0004fff8  READ MEM WRAPPED hw_addr=000020
+         15766972000 ch0 CS# high after 60 CK edges (0 data edges)
+         15767063000 ch1 CA=9ffc0002fffe  READ MEM WRAPPED hw_addr=000016
+         15767269000 ch1 CS# high after 60 CK edges (0 data edges)
+         15767345000 ch1 CA=9ffc0009fffc  READ MEM WRAPPED hw_addr=00004c
+         15767345000 ch0 CA=9ffc000effff  READ MEM WRAPPED hw_addr=000077
+         15767550000 ch1 CS# high after 60 CK edges (0 data edges)
+         15767550000 ch0 CS# high after 60 CK edges (0 data edges)
+         15767626000 ch0 CA=1ffc0018fff8 WRITE MEM WRAPPED hw_addr=0000c0
+         15767832000 ch0 CS# high after 60 CK edges (0 data edges)
+         15767908000 ch0 CA=9ffc001ffffb  READ MEM WRAPPED hw_addr=0000fb
+         15767922000 ch1 CA=9ffc0017fffe  READ MEM WRAPPED hw_addr=0000be
+         15768113000 ch0 CS# high after 60 CK edges (0 data edges)
+         15768128000 ch1 CS# high after 60 CK edges (0 data edges)
+         15768189000 ch0 CA=9ffc0017fffe  READ MEM WRAPPED hw_addr=0000be
+         15768395000 ch0 CS# high after 60 CK edges (0 data edges)
+         15768500000 ch1 CA=9ffc0014fff8  READ MEM WRAPPED hw_addr=0000a0
+         15768706000 ch1 CS# high after 60 CK edges (0 data edges)
+         15768767000 ch0 CA=9ffc0018fffc  READ MEM WRAPPED hw_addr=0000c4
+         15768973000 ch0 CS# high after 60 CK edges (0 data edges)
+         15769048000 ch0 CA=1ffc0004ffff WRITE MEM WRAPPED hw_addr=000027
+         15769078000 ch1 CA=9ffc000efff9  READ MEM WRAPPED hw_addr=000071
+         15769254000 ch0 CS# high after 60 CK edges (0 data edges)
+         15769284000 ch1 CS# high after 60 CK edges (0 data edges)
+         15769360000 ch1 CA=9ffc000cfffb  READ MEM WRAPPED hw_addr=000063
+         15769565000 ch1 CS# high after 60 CK edges (0 data edges)
+         15769626000 ch0 CA=1ffc0006fff8 WRITE MEM WRAPPED hw_addr=000030
+         15769832000 ch0 CS# high after 60 CK edges (0 data edges)
+         15769937000 ch1 CA=1ffc001afffe WRITE MEM WRAPPED hw_addr=0000d6
+         15770143000 ch1 CS# high after 60 CK edges (0 data edges)
+         15770204000 ch0 CA=1ffc001efffc WRITE MEM WRAPPED hw_addr=0000f4
+         15770410000 ch0 CS# high after 60 CK edges (0 data edges)
+         15770486000 ch0 CA=1ffc0003fff9 WRITE MEM WRAPPED hw_addr=000019
+         15770515000 ch1 CA=1ffc001afff8 WRITE MEM WRAPPED hw_addr=0000d0
+         15770691000 ch0 CS# high after 60 CK edges (0 data edges)
+         15770721000 ch1 CS# high after 60 CK edges (0 data edges)
+         15770826000 ch1 CA=1ffc000ffffd WRITE MEM WRAPPED hw_addr=00007d
+         15771032000 ch1 CS# high after 60 CK edges (0 data edges)
+         15771063000 ch0 CA=1ffc001cfffb WRITE MEM WRAPPED hw_addr=0000e3
+         15771269000 ch0 CS# high after 60 CK edges (0 data edges)
+         15771345000 ch0 CA=1ffc0003fffd WRITE MEM WRAPPED hw_addr=00001d
+         15771404000 ch1 CA=9ffc001affff  READ MEM WRAPPED hw_addr=0000d7
+         15771551000 ch0 CS# high after 60 CK edges (0 data edges)
+         15771610000 ch1 CS# high after 60 CK edges (0 data edges)
+         15771626000 ch0 CA=1ffc001efff8 WRITE MEM WRAPPED hw_addr=0000f0
+         15771686000 ch1 CA=9ffc0019fff8  READ MEM WRAPPED hw_addr=0000c8
+         15771832000 ch0 CS# high after 60 CK edges (0 data edges)
+         15771891000 ch1 CS# high after 60 CK edges (0 data edges)
+         15771967000 ch1 CA=1ffc000bfffb WRITE MEM WRAPPED hw_addr=00005b
+         15772173000 ch1 CS# high after 60 CK edges (0 data edges)
+         15772204000 ch0 CA=1ffc001efffe WRITE MEM WRAPPED hw_addr=0000f6
+         15772410000 ch0 CS# high after 60 CK edges (0 data edges)
+         15772545000 ch1 CA=9ffc001bfff9  READ MEM WRAPPED hw_addr=0000d9
+         15772751000 ch1 CS# high after 60 CK edges (0 data edges)
+         15772782000 ch0 CA=9ffc000efff8  READ MEM WRAPPED hw_addr=000070
+         15772827000 ch1 CA=9ffc000ffff9  READ MEM WRAPPED hw_addr=000079
+         15772988000 ch0 CS# high after 60 CK edges (0 data edges)
+         15773032000 ch1 CS# high after 60 CK edges (0 data edges)
+         15773360000 ch0 CA=1ffc0011fffc WRITE MEM WRAPPED hw_addr=00008c
+         15773404000 ch1 CA=9ffc0000fff9  READ MEM WRAPPED hw_addr=000001
+         15773565000 ch0 CS# high after 60 CK edges (0 data edges)
+         15773610000 ch1 CS# high after 60 CK edges (0 data edges)
+         15773641000 ch0 CA=1ffc0010fffb WRITE MEM WRAPPED hw_addr=000083
+         15773847000 ch0 CS# high after 60 CK edges (0 data edges)
+         15773923000 ch0 CA=9ffc0010fff9  READ MEM WRAPPED hw_addr=000081
+         15773982000 ch1 CA=1ffc001cfffe WRITE MEM WRAPPED hw_addr=0000e6
+         15774128000 ch0 CS# high after 60 CK edges (0 data edges)
+         15774188000 ch1 CS# high after 60 CK edges (0 data edges)
+         15774204000 ch0 CA=9ffc0000fff8  READ MEM WRAPPED hw_addr=000000
+         15774410000 ch0 CS# high after 60 CK edges (0 data edges)
+         15774486000 ch0 CA=9ffc0004fff8  READ MEM WRAPPED hw_addr=000020
+         15774560000 ch1 CA=1ffc001dfffe WRITE MEM WRAPPED hw_addr=0000ee
+         15774692000 ch0 CS# high after 60 CK edges (0 data edges)
+         15774766000 ch1 CS# high after 60 CK edges (0 data edges)
+         15774842000 ch1 CA=9ffc001cfffb  READ MEM WRAPPED hw_addr=0000e3
+         15775047000 ch1 CS# high after 60 CK edges (0 data edges)
+         15775064000 ch0 CA=1ffc0008fffb WRITE MEM WRAPPED hw_addr=000043
+         15775123000 ch1 CA=1ffc001bffff WRITE MEM WRAPPED hw_addr=0000df
+         15775269000 ch0 CS# high after 60 CK edges (0 data edges)
+         15775329000 ch1 CS# high after 60 CK edges (0 data edges)
+         15775642000 ch0 CA=1ffc001efff8 WRITE MEM WRAPPED hw_addr=0000f0
+         15775701000 ch1 CA=9ffc001cfffd  READ MEM WRAPPED hw_addr=0000e5
+         15775847000 ch0 CS# high after 60 CK edges (0 data edges)
+         15775906000 ch1 CS# high after 60 CK edges (0 data edges)
+         15775982000 ch1 CA=9ffc001cfff8  READ MEM WRAPPED hw_addr=0000e0
+         15776188000 ch1 CS# high after 60 CK edges (0 data edges)
+         15776353000 ch0 CA=1ffc0013fff8 WRITE MEM WRAPPED hw_addr=000098
+         15776558000 ch0 CS# high after 60 CK edges (0 data edges)
+         15776560000 ch1 CA=9ffc000efff8  READ MEM WRAPPED hw_addr=000070
+         15776766000 ch1 CS# high after 60 CK edges (0 data edges)
+         15776931000 ch0 CA=1ffc000cfffd WRITE MEM WRAPPED hw_addr=000065
+         15777136000 ch0 CS# high after 60 CK edges (0 data edges)
+         15777138000 ch1 CA=9ffc000bffff  READ MEM WRAPPED hw_addr=00005f
+         15777344000 ch1 CS# high after 60 CK edges (0 data edges)
+         15777419000 ch1 CA=1ffc0016fffa WRITE MEM WRAPPED hw_addr=0000b2
+         15777508000 ch0 CA=1ffc000efffa WRITE MEM WRAPPED hw_addr=000072
+         15777625000 ch1 CS# high after 60 CK edges (0 data edges)
+         15777701000 ch1 CA=1ffc0017ffff WRITE MEM WRAPPED hw_addr=0000bf
+         15777714000 ch0 CS# high after 60 CK edges (0 data edges)
+         15777907000 ch1 CS# high after 60 CK edges (0 data edges)
+         15777983000 ch1 CA=1ffc000afffe WRITE MEM WRAPPED hw_addr=000056
+         15778086000 ch0 CA=1ffc001dfffd WRITE MEM WRAPPED hw_addr=0000ed
+         15778188000 ch1 CS# high after 60 CK edges (0 data edges)
+         15778292000 ch0 CS# high after 60 CK edges (0 data edges)
+         15778560000 ch1 CA=9ffc000bffff  READ MEM WRAPPED hw_addr=00005f
+         15778664000 ch0 CA=1ffc001dfff9 WRITE MEM WRAPPED hw_addr=0000e9
+         15778766000 ch1 CS# high after 60 CK edges (0 data edges)
+         15778870000 ch0 CS# high after 60 CK edges (0 data edges)
+         15778946000 ch0 CA=9ffc000cfff8  READ MEM WRAPPED hw_addr=000060
+         15779138000 ch1 CA=1ffc0009fffa WRITE MEM WRAPPED hw_addr=00004a
+         15779151000 ch0 CS# high after 60 CK edges (0 data edges)
+         15779344000 ch1 CS# high after 60 CK edges (0 data edges)
+         15779420000 ch1 CA=9ffc0002fff9  READ MEM WRAPPED hw_addr=000011
+         15779523000 ch0 CA=9ffc0009fffc  READ MEM WRAPPED hw_addr=00004c
+         15779625000 ch1 CS# high after 60 CK edges (0 data edges)
+         15779701000 ch1 CA=9ffc000cfff8  READ MEM WRAPPED hw_addr=000060
+         15779729000 ch0 CS# high after 60 CK edges (0 data edges)
+         15779907000 ch1 CS# high after 60 CK edges (0 data edges)
+         15780101000 ch0 CA=9ffc0000fff8  READ MEM WRAPPED hw_addr=000000
+         15780279000 ch1 CA=1ffc0008fffe WRITE MEM WRAPPED hw_addr=000046
+         15780307000 ch0 CS# high after 60 CK edges (0 data edges)
+         15780485000 ch1 CS# high after 60 CK edges (0 data edges)
+         15780723000 ch0 CA=9ffc000bffff  READ MEM WRAPPED hw_addr=00005f
+         15780857000 ch1 CA=9ffc000afff8  READ MEM WRAPPED hw_addr=000050
+         15780929000 ch0 CS# high after 60 CK edges (0 data edges)
+         15781005000 ch0 CA=9ffc0001fffc  READ MEM WRAPPED hw_addr=00000c
+         15781062000 ch1 CS# high after 60 CK edges (0 data edges)
+         15781211000 ch0 CS# high after 60 CK edges (0 data edges)
+         15781583000 ch0 CA=9ffc0011fffe  READ MEM WRAPPED hw_addr=00008e
+         15781598000 ch1 CA=9ffc000cfffe  READ MEM WRAPPED hw_addr=000066
+         15781788000 ch0 CS# high after 60 CK edges (0 data edges)
+         15781803000 ch1 CS# high after 60 CK edges (0 data edges)
+         15781879000 ch1 CA=1ffc0006fff8 WRITE MEM WRAPPED hw_addr=000030
+         15782085000 ch1 CS# high after 60 CK edges (0 data edges)
+         15782161000 ch1 CA=1ffc0012fff8 WRITE MEM WRAPPED hw_addr=000090
+         15782161000 ch0 CA=1ffc000efffc WRITE MEM WRAPPED hw_addr=000074
+         15782366000 ch1 CS# high after 60 CK edges (0 data edges)
+         15782366000 ch0 CS# high after 60 CK edges (0 data edges)
+         15782738000 ch1 CA=9ffc000bfff9  READ MEM WRAPPED hw_addr=000059
+         15782738000 ch0 CA=9ffc0002fff9  READ MEM WRAPPED hw_addr=000011
+         15782944000 ch1 CS# high after 60 CK edges (0 data edges)
+         15782944000 ch0 CS# high after 60 CK edges (0 data edges)
+         15783316000 ch1 CA=1ffc001bfff8 WRITE MEM WRAPPED hw_addr=0000d8
+         15783316000 ch0 CA=1ffc001dffff WRITE MEM WRAPPED hw_addr=0000ef
+         15783522000 ch1 CS# high after 60 CK edges (0 data edges)
+         15783522000 ch0 CS# high after 60 CK edges (0 data edges)
+         15783598000 ch0 CA=9ffc0018fff9  READ MEM WRAPPED hw_addr=0000c1
+         15783803000 ch0 CS# high after 60 CK edges (0 data edges)
+         15783894000 ch1 CA=1ffc0005fff9 WRITE MEM WRAPPED hw_addr=000029
+         15784100000 ch1 CS# high after 60 CK edges (0 data edges)
+         15784176000 ch1 CA=9ffc0009fff8  READ MEM WRAPPED hw_addr=000048
+         15784176000 ch0 CA=9ffc0009fffa  READ MEM WRAPPED hw_addr=00004a
+         15784381000 ch1 CS# high after 60 CK edges (0 data edges)
+         15784381000 ch0 CS# high after 60 CK edges (0 data edges)
+         15784753000 ch1 CA=9ffc0015fffa  READ MEM WRAPPED hw_addr=0000aa
+         15784753000 ch0 CA=9ffc0008fff8  READ MEM WRAPPED hw_addr=000040
+         15784959000 ch1 CS# high after 60 CK edges (0 data edges)
+         15784959000 ch0 CS# high after 60 CK edges (0 data edges)
+         15785331000 ch1 CA=1ffc000afff8 WRITE MEM WRAPPED hw_addr=000050
+         15785376000 ch0 CA=1ffc0011fffc WRITE MEM WRAPPED hw_addr=00008c
+         15785537000 ch1 CS# high after 60 CK edges (0 data edges)
+         15785581000 ch0 CS# high after 60 CK edges (0 data edges)
+         15785657000 ch0 CA=1ffc000afffb WRITE MEM WRAPPED hw_addr=000053
+         15785863000 ch0 CS# high after 60 CK edges (0 data edges)
+         15785909000 ch1 CA=9ffc000afff8  READ MEM WRAPPED hw_addr=000050
+         15785939000 ch0 CA=1ffc0008fff8 WRITE MEM WRAPPED hw_addr=000040
+         15786115000 ch1 CS# high after 60 CK edges (0 data edges)
+         15786144000 ch0 CS# high after 60 CK edges (0 data edges)
+         15786191000 ch1 CA=9ffc0004fff9  READ MEM WRAPPED hw_addr=000021
+         15786396000 ch1 CS# high after 60 CK edges (0 data edges)
+         15786472000 ch1 CA=1ffc0003fff8 WRITE MEM WRAPPED hw_addr=000018
+         15786517000 ch0 CA=1ffc000dfffc WRITE MEM WRAPPED hw_addr=00006c
+         15786678000 ch1 CS# high after 60 CK edges (0 data edges)
+         15786722000 ch0 CS# high after 60 CK edges (0 data edges)
+         15786798000 ch0 CA=1ffc001efffa WRITE MEM WRAPPED hw_addr=0000f2
+         15787004000 ch0 CS# high after 60 CK edges (0 data edges)
+         15787050000 ch1 CA=9ffc0013fffd  READ MEM WRAPPED hw_addr=00009d
+         15787255000 ch1 CS# high after 60 CK edges (0 data edges)
+         15787331000 ch1 CA=1ffc0016fffe WRITE MEM WRAPPED hw_addr=0000b6
+         15787376000 ch0 CA=9ffc000afffe  READ MEM WRAPPED hw_addr=000056
+         15787537000 ch1 CS# high after 60 CK edges (0 data edges)
+         15787581000 ch0 CS# high after 60 CK edges (0 data edges)
+         15787909000 ch1 CA=1ffc0018fff8 WRITE MEM WRAPPED hw_addr=0000c0
+         15787954000 ch0 CA=9ffc0001fffc  READ MEM WRAPPED hw_addr=00000c
+         15788115000 ch1 CS# high after 60 CK edges (0 data edges)
+         15788159000 ch0 CS# high after 60 CK edges (0 data edges)
+         15788531000 ch0 CA=9ffc0003fffb  READ MEM WRAPPED hw_addr=00001b
+         15788709000 ch1 CA=9ffc0013fffb  READ MEM WRAPPED hw_addr=00009b
+         15788737000 ch0 CS# high after 60 CK edges (0 data edges)
+         15788915000 ch1 CS# high after 60 CK edges (0 data edges)
+         15788991000 ch1 CA=9ffc0001fffb  READ MEM WRAPPED hw_addr=00000b
+         15789109000 ch0 CA=1ffc0002fffb WRITE MEM WRAPPED hw_addr=000013
+         15789196000 ch1 CS# high after 60 CK edges (0 data edges)
+         15789272000 ch1 CA=1ffc0019fff8 WRITE MEM WRAPPED hw_addr=0000c8
+         15789315000 ch0 CS# high after 60 CK edges (0 data edges)
+         15789391000 ch0 CA=1ffc0013fff8 WRITE MEM WRAPPED hw_addr=000098
+         15789478000 ch1 CS# high after 60 CK edges (0 data edges)
+         15789554000 ch1 CA=1ffc000efffe WRITE MEM WRAPPED hw_addr=000076
+         15789596000 ch0 CS# high after 60 CK edges (0 data edges)
+         15789672000 ch0 CA=1ffc0015fff8 WRITE MEM WRAPPED hw_addr=0000a8
+         15789759000 ch1 CS# high after 60 CK edges (0 data edges)
+         15789835000 ch1 CA=9ffc000efffe  READ MEM WRAPPED hw_addr=000076
+         15789878000 ch0 CS# high after 60 CK edges (0 data edges)
+         15789954000 ch0 CA=1ffc000efffe WRITE MEM WRAPPED hw_addr=000076
+         15790041000 ch1 CS# high after 60 CK edges (0 data edges)
+         15790159000 ch0 CS# high after 60 CK edges (0 data edges)
+         15790413000 ch1 CA=1ffc0019fffb WRITE MEM WRAPPED hw_addr=0000cb
+         15790532000 ch0 CA=9ffc0014fffc  READ MEM WRAPPED hw_addr=0000a4
+         15790619000 ch1 CS# high after 60 CK edges (0 data edges)
+         15790695000 ch1 CA=9ffc001efff8  READ MEM WRAPPED hw_addr=0000f0
+         15790737000 ch0 CS# high after 60 CK edges (0 data edges)
+         15790900000 ch1 CS# high after 60 CK edges (0 data edges)
+         15790976000 ch1 CA=1ffc0007fff9 WRITE MEM WRAPPED hw_addr=000039
+         15791109000 ch0 CA=9ffc0017ffff  READ MEM WRAPPED hw_addr=0000bf
+         15791182000 ch1 CS# high after 60 CK edges (0 data edges)
+         15791258000 ch1 CA=1ffc0002fffc WRITE MEM WRAPPED hw_addr=000014
+         15791315000 ch0 CS# high after 60 CK edges (0 data edges)
+         15791391000 ch0 CA=9ffc000bffff  READ MEM WRAPPED hw_addr=00005f
+         15791463000 ch1 CS# high after 60 CK edges (0 data edges)
+         15791597000 ch0 CS# high after 60 CK edges (0 data edges)
+         15791835000 ch1 CA=1ffc001bfff9 WRITE MEM WRAPPED hw_addr=0000d9
+         15791969000 ch0 CA=1ffc0010fff8 WRITE MEM WRAPPED hw_addr=000080
+         15792041000 ch1 CS# high after 60 CK edges (0 data edges)
+         15792117000 ch1 CA=9ffc000afffe  READ MEM WRAPPED hw_addr=000056
+         15792174000 ch0 CS# high after 60 CK edges (0 data edges)
+         15792323000 ch1 CS# high after 60 CK edges (0 data edges)
+         15792547000 ch0 CA=1ffc0000fffa WRITE MEM WRAPPED hw_addr=000002
+         15792695000 ch1 CA=9ffc001bfff8  READ MEM WRAPPED hw_addr=0000d8
+         15792752000 ch0 CS# high after 60 CK edges (0 data edges)
+         15792828000 ch0 CA=9ffc0000fff8  READ MEM WRAPPED hw_addr=000000
+         15792900000 ch1 CS# high after 60 CK edges (0 data edges)
+         15792976000 ch1 CA=9ffc000dfff8  READ MEM WRAPPED hw_addr=000068
+         15793034000 ch0 CS# high after 60 CK edges (0 data edges)
+         15793110000 ch0 CA=9ffc0018fff8  READ MEM WRAPPED hw_addr=0000c0
+         15793182000 ch1 CS# high after 60 CK edges (0 data edges)
+         15793258000 ch1 CA=9ffc001cfffb  READ MEM WRAPPED hw_addr=0000e3
+         15793315000 ch0 CS# high after 60 CK edges (0 data edges)
+         15793391000 ch0 CA=1ffc0001ffff WRITE MEM WRAPPED hw_addr=00000f
+         15793463000 ch1 CS# high after 60 CK edges (0 data edges)
+         15793539000 ch1 CA=1ffc001affff WRITE MEM WRAPPED hw_addr=0000d7
+         15793597000 ch0 CS# high after 60 CK edges (0 data edges)
+         15793673000 ch0 CA=9ffc0008fff8  READ MEM WRAPPED hw_addr=000040
+         15793745000 ch1 CS# high after 60 CK edges (0 data edges)
+         15793821000 ch1 CA=9ffc001efffd  READ MEM WRAPPED hw_addr=0000f5
+         15793878000 ch0 CS# high after 60 CK edges (0 data edges)
+         15793954000 ch0 CA=9ffc0015ffff  READ MEM WRAPPED hw_addr=0000af
+         15794026000 ch1 CS# high after 60 CK edges (0 data edges)
+         15794160000 ch0 CS# high after 60 CK edges (0 data edges)
+         15794399000 ch1 CA=1ffc0005fffb WRITE MEM WRAPPED hw_addr=00002b
+         15794532000 ch0 CA=9ffc000fffff  READ MEM WRAPPED hw_addr=00007f
+         15794604000 ch1 CS# high after 60 CK edges (0 data edges)
+         15794738000 ch0 CS# high after 60 CK edges (0 data edges)
+         15794813000 ch0 CA=9ffc0009fffd  READ MEM WRAPPED hw_addr=00004d
+         15794976000 ch1 CA=1ffc0008fff9 WRITE MEM WRAPPED hw_addr=000041
+         15795019000 ch0 CS# high after 60 CK edges (0 data edges)
+         15795182000 ch1 CS# high after 60 CK edges (0 data edges)
+         15795391000 ch0 CA=9ffc000bfff8  READ MEM WRAPPED hw_addr=000058
+         15795554000 ch1 CA=9ffc0003fff9  READ MEM WRAPPED hw_addr=000019
+         15795597000 ch0 CS# high after 60 CK edges (0 data edges)
+         15795673000 ch0 CA=9ffc000bfffc  READ MEM WRAPPED hw_addr=00005c
+         15795760000 ch1 CS# high after 60 CK edges (0 data edges)
+         15795836000 ch1 CA=9ffc001bfffb  READ MEM WRAPPED hw_addr=0000db
+         15795878000 ch0 CS# high after 60 CK edges (0 data edges)
+         15795954000 ch0 CA=1ffc0017fffb WRITE MEM WRAPPED hw_addr=0000bb
+         15796041000 ch1 CS# high after 60 CK edges (0 data edges)
+         15796117000 ch1 CA=9ffc0019fffb  READ MEM WRAPPED hw_addr=0000cb
+         15796160000 ch0 CS# high after 60 CK edges (0 data edges)
+         15796323000 ch1 CS# high after 60 CK edges (0 data edges)
+         15796532000 ch0 CA=9ffc0015fffe  READ MEM WRAPPED hw_addr=0000ae
+         15796695000 ch1 CA=9ffc0009fff9  READ MEM WRAPPED hw_addr=000049
+         15796738000 ch0 CS# high after 60 CK edges (0 data edges)
+         15796901000 ch1 CS# high after 60 CK edges (0 data edges)
+         15796977000 ch1 CA=1ffc000afffe WRITE MEM WRAPPED hw_addr=000056
+         15797110000 ch0 CA=1ffc001cffff WRITE MEM WRAPPED hw_addr=0000e7
+         15797182000 ch1 CS# high after 60 CK edges (0 data edges)
+         15797258000 ch1 CA=1ffc0012fff8 WRITE MEM WRAPPED hw_addr=000090
+         15797316000 ch0 CS# high after 60 CK edges (0 data edges)
+         15797464000 ch1 CS# high after 60 CK edges (0 data edges)
+         15797688000 ch0 CA=1ffc0016fffa WRITE MEM WRAPPED hw_addr=0000b2
+         15797747000 ch1 CA=1ffc0012fff8 WRITE MEM WRAPPED hw_addr=000090
+         15797893000 ch0 CS# high after 60 CK edges (0 data edges)
+         15797953000 ch1 CS# high after 60 CK edges (0 data edges)
+         15797969000 ch0 CA=9ffc0012fff9  READ MEM WRAPPED hw_addr=000091
+         15798175000 ch0 CS# high after 60 CK edges (0 data edges)
+         15798251000 ch0 CA=1ffc0000fffc WRITE MEM WRAPPED hw_addr=000004
+         15798325000 ch1 CA=1ffc0019fffb WRITE MEM WRAPPED hw_addr=0000cb
+         15798456000 ch0 CS# high after 60 CK edges (0 data edges)
+         15798530000 ch1 CS# high after 60 CK edges (0 data edges)
+         15798532000 ch0 CA=1ffc000affff WRITE MEM WRAPPED hw_addr=000057
+         15798606000 ch1 CA=1ffc001afffa WRITE MEM WRAPPED hw_addr=0000d2
+         15798738000 ch0 CS# high after 60 CK edges (0 data edges)
+         15798812000 ch1 CS# high after 60 CK edges (0 data edges)
+         15798814000 ch0 CA=1ffc0002fff8 WRITE MEM WRAPPED hw_addr=000010
+         15799019000 ch0 CS# high after 60 CK edges (0 data edges)
+         15799095000 ch0 CA=1ffc0019fffd WRITE MEM WRAPPED hw_addr=0000cd
+         15799301000 ch0 CS# high after 60 CK edges (0 data edges)
+         15799673000 ch0 CA=1ffc0005fffd WRITE MEM WRAPPED hw_addr=00002d
+         15799879000 ch0 CS# high after 60 CK edges (0 data edges)
+         15799955000 ch0 CA=1ffc001afffc WRITE MEM WRAPPED hw_addr=0000d4
+         15800160000 ch0 CS# high after 60 CK edges (0 data edges)
+         15800532000 ch0 CA=9ffc0014fffc  READ MEM WRAPPED hw_addr=0000a4
+         15800738000 ch0 CS# high after 60 CK edges (0 data edges)
+         15801110000 ch0 CA=1ffc001afffa WRITE MEM WRAPPED hw_addr=0000d2
+         15801316000 ch0 CS# high after 60 CK edges (0 data edges)
+         15801392000 ch0 CA=9ffc000cfff8  READ MEM WRAPPED hw_addr=000060
+         15801597000 ch0 CS# high after 60 CK edges (0 data edges)
+         15801970000 ch0 CA=1ffc0006fff8 WRITE MEM WRAPPED hw_addr=000030
+         15802175000 ch0 CS# high after 60 CK edges (0 data edges)
+         15802740000 ch0 CA=1ffc0003ffff WRITE MEM WRAPPED hw_addr=00001f
+         15802946000 ch0 CS# high after 60 CK edges (0 data edges)
+         15803318000 ch0 CA=9ffc0002fffe  READ MEM WRAPPED hw_addr=000016
+         15803523000 ch0 CS# high after 60 CK edges (0 data edges)
+         15803896000 ch0 CA=9ffc0003fffe  READ MEM WRAPPED hw_addr=00001e
+         15804101000 ch0 CS# high after 60 CK edges (0 data edges)
+         15804474000 ch0 CA=9ffc0006fff8  READ MEM WRAPPED hw_addr=000030
+         15804679000 ch0 CS# high after 60 CK edges (0 data edges)
+         15805051000 ch0 CA=1ffc0004fff9 WRITE MEM WRAPPED hw_addr=000021
+         15805257000 ch0 CS# high after 60 CK edges (0 data edges)
+  291 random reads, latency min 16 max 16
+  model protocol errors in legal phases: 0
+  IP-vs-model mismatches in legal phases: 0, stray beats: 0
+
+==== phase P7 pre-fill (T0+10876, t=15805846000)
+         15806088000 ch0 CA=1ffc0800fff8 WRITE MEM WRAPPED hw_addr=004000
+         15806294000 ch0 CS# high after 60 CK edges (0 data edges)
+         15806370000 ch0 CA=1ffc0802fff8 WRITE MEM WRAPPED hw_addr=004010
+         15806576000 ch0 CS# high after 60 CK edges (0 data edges)
+         15806651000 ch0 CA=1ffc0804fff8 WRITE MEM WRAPPED hw_addr=004020
+         15806857000 ch0 CS# high after 60 CK edges (0 data edges)
+         15806933000 ch0 CA=1ffc0806fff8 WRITE MEM WRAPPED hw_addr=004030
+         15807139000 ch0 CS# high after 60 CK edges (0 data edges)
+         15807214000 ch0 CA=1ffc0808fff8 WRITE MEM WRAPPED hw_addr=004040
+         15807420000 ch0 CS# high after 60 CK edges (0 data edges)
+         15807496000 ch0 CA=1ffc080afff8 WRITE MEM WRAPPED hw_addr=004050
+         15807702000 ch0 CS# high after 60 CK edges (0 data edges)
+         15807777000 ch0 CA=1ffc080cfff8 WRITE MEM WRAPPED hw_addr=004060
+         15807983000 ch0 CS# high after 60 CK edges (0 data edges)
+         15808059000 ch0 CA=1ffc080efff8 WRITE MEM WRAPPED hw_addr=004070
+         15808265000 ch0 CS# high after 60 CK edges (0 data edges)
+         15808340000 ch0 CA=1ffc0810fff8 WRITE MEM WRAPPED hw_addr=004080
+         15808546000 ch0 CS# high after 60 CK edges (0 data edges)
+         15808622000 ch0 CA=1ffc0812fff8 WRITE MEM WRAPPED hw_addr=004090
+         15808828000 ch0 CS# high after 60 CK edges (0 data edges)
+         15808903000 ch0 CA=1ffc0814fff8 WRITE MEM WRAPPED hw_addr=0040a0
+         15809109000 ch0 CS# high after 60 CK edges (0 data edges)
+         15809185000 ch0 CA=1ffc0816fff8 WRITE MEM WRAPPED hw_addr=0040b0
+         15809391000 ch0 CS# high after 60 CK edges (0 data edges)
+         15809467000 ch0 CA=1ffc0818fff8 WRITE MEM WRAPPED hw_addr=0040c0
+         15809672000 ch0 CS# high after 60 CK edges (0 data edges)
+         15809748000 ch0 CA=1ffc081afff8 WRITE MEM WRAPPED hw_addr=0040d0
+         15809954000 ch0 CS# high after 60 CK edges (0 data edges)
+         15810030000 ch0 CA=1ffc081cfff8 WRITE MEM WRAPPED hw_addr=0040e0
+         15810235000 ch0 CS# high after 60 CK edges (0 data edges)
+         15810311000 ch0 CA=1ffc081efff8 WRITE MEM WRAPPED hw_addr=0040f0
+         15810517000 ch0 CS# high after 60 CK edges (0 data edges)
+
+==== phase P7 spacing violations (T0+11231, t=15811106000)
+         15811348000 ch0 CA=1ffc0600fff8 WRITE MEM WRAPPED hw_addr=003000
+         15811520000 psram_ui_model ERROR ch0: cmd_en closer than TCMD to the previous command
+         15811554000 ch0 CS# high after 60 CK edges (0 data edges)
+         15811615000 ch0 CA=1ffc0602fff8 WRITE MEM WRAPPED hw_addr=003010
+         15811820000 ch0 CS# high after 60 CK edges (0 data edges)
+         15812504000 ch0 CA=9ffc0600fff8  READ MEM WRAPPED hw_addr=003000
+         15812709000 ch0 CS# high after 60 CK edges (0 data edges)
+         15813096000 ch0 CA=9ffc0602fff8  READ MEM WRAPPED hw_addr=003010
+         15813302000 ch0 CS# high after 60 CK edges (0 data edges)
+         15813985000 ch0 CA=1ffc0604fff8 WRITE MEM WRAPPED hw_addr=003020
+         15814143000 psram_ui_model ERROR ch0: cmd_en closer than TCMD to the previous command
+         15814191000 ch0 CS# high after 60 CK edges (0 data edges)
+         15814237000 ch0 CA=zzzzzzzzfff8  RA@D @EE  @A@@A@ hw_addr=zzzzzZ
+         15814443000 ch0 CS# high after 60 CK edges (0 data edges)
+         15815126000 ch0 CA=9ffc0604fff8  READ MEM WRAPPED hw_addr=003020
+         15815332000 ch0 CS# high after 60 CK edges (0 data edges)
+         15815719000 ch0 CA=9ffc0606fff8  READ MEM WRAPPED hw_addr=003030
+         15815924000 ch0 CS# high after 60 CK edges (0 data edges)
+         15816608000 ch0 CA=1ffc0608fff8 WRITE MEM WRAPPED hw_addr=003040
+         15816750000 psram_ui_model ERROR ch0: cmd_en closer than TCMD to the previous command
+         15816825000 ch0 CS# high after 60 CK edges (0 data edges)
+         15816839000 ch0 CS# high after 2 CK edges (0 data edges)
+         15816854000 ch0 CS# high after 2 CK edges (0 data edges)
+         15816869000 ch0 CS# high after 2 CK edges (0 data edges)
+         15816884000 ch0 CS# high after 2 CK edges (0 data edges)
+         15816899000 ch0 CS# high after 2 CK edges (0 data edges)
+         15816913000 ch0 CS# high after 2 CK edges (0 data edges)
+         15816928000 ch0 CS# high after 2 CK edges (0 data edges)
+         15816943000 ch0 CS# high after 2 CK edges (0 data edges)
+         15816958000 ch0 CS# high after 2 CK edges (0 data edges)
+         15816973000 ch0 CS# high after 2 CK edges (0 data edges)
+         15816987000 ch0 CS# high after 2 CK edges (0 data edges)
+         15817002000 ch0 CS# high after 2 CK edges (0 data edges)
+         15817017000 ch0 CS# high after 2 CK edges (0 data edges)
+         15817032000 ch0 CS# high after 2 CK edges (0 data edges)
+         15817047000 ch0 CS# high after 2 CK edges (0 data edges)
+         15817734000 ch0 CA=9ffc0608fff8  READ MEM WRAPPED hw_addr=003040
+         15817939000 ch0 CS# high after 60 CK edges (0 data edges)
+         15818326000 ch0 CA=9ffc060afff8  READ MEM WRAPPED hw_addr=003050
+         15818532000 ch0 CS# high after 60 CK edges (0 data edges)
+         15819215000 ch0 CA=1ffc060cfff8 WRITE MEM WRAPPED hw_addr=003060
+         15819299000 psram_ui_model ERROR ch0: cmd_en closer than TCMD to the previous command
+         15819421000 ch0 CS# high after 56 CK edges (0 data edges)
+         15820282000 ch0 CA=9ffc060cfff8  READ MEM WRAPPED hw_addr=003060
+         15820488000 ch0 CS# high after 60 CK edges (0 data edges)
+         15820875000 ch0 CA=9ffc060efff8  READ MEM WRAPPED hw_addr=003070
+         15821080000 ch0 CS# high after 60 CK edges (0 data edges)
+         15821729000 psram_ui_model ERROR ch0: cmd_en closer than TCMD to the previous command
+         15821729000 psram_ui_model ERROR ch0: cmd_en while write beats are still being sampled
+         15821764000 ch0 CA=1ffc0610fff8 WRITE MEM WRAPPED hw_addr=003080
+         15821969000 ch0 CS# high after 56 CK edges (0 data edges)
+         15822712000 ch0 CA=9ffc0610fff8  READ MEM WRAPPED hw_addr=003080
+         15822918000 ch0 CS# high after 60 CK edges (0 data edges)
+         15823305000 ch0 CA=9ffc0612fff8  READ MEM WRAPPED hw_addr=003090
+         15823510000 ch0 CS# high after 60 CK edges (0 data edges)
+         15824114000 psram_ui_model ERROR ch0: cmd_en closer than TCMD to the previous command
+         15824114000 psram_ui_model ERROR ch0: cmd_en while write beats are still being sampled
+         15824208000 ch0 CA=1ffc0616fff8 WRITE MEM WRAPPED hw_addr=0030b0
+         15824399000 ch0 CS# high after 56 CK edges (0 data edges)
+         15825097000 ch0 CA=9ffc0614fff8  READ MEM WRAPPED hw_addr=0030a0
+         15825303000 ch0 CS# high after 60 CK edges (0 data edges)
+         15825690000 ch0 CA=9ffc0616fff8  READ MEM WRAPPED hw_addr=0030b0
+         15825896000 ch0 CS# high after 60 CK edges (0 data edges)
+         15826579000 ch0 CA=9ffc0800fff8  READ MEM WRAPPED hw_addr=004000
+         15826751000 psram_ui_model ERROR ch0: cmd_en closer than TCMD to the previous command
+         15826785000 ch0 CS# high after 60 CK edges (0 data edges)
+         15826846000 ch0 CA=9ffc0802fff8  READ MEM WRAPPED hw_addr=004010
+         15827051000 ch0 CS# high after 60 CK edges (0 data edges)
+         15828327000 ch0 CA=9ffc0804fff8  READ MEM WRAPPED hw_addr=004020
+         15828485000 psram_ui_model ERROR ch0: cmd_en closer than TCMD to the previous command
+         15828533000 ch0 CS# high after 60 CK edges (0 data edges)
+         15828579000 ch0 CA=zzzzzzzzfff8  RA@D @EE  @A@@A@ hw_addr=zzzzzZ
+         15828785000 ch0 CS# high after 60 CK edges (0 data edges)
+         15830061000 ch0 CA=9ffc0808fff8  READ MEM WRAPPED hw_addr=004040
+         15830203000 psram_ui_model ERROR ch0: cmd_en closer than TCMD to the previous command
+         15830277000 ch0 CS# high after 60 CK edges (0 data edges)
+         15830292000 ch0 CS# high after 2 CK edges (0 data edges)
+         15830307000 ch0 CS# high after 2 CK edges (0 data edges)
+         15830322000 ch0 CS# high after 2 CK edges (0 data edges)
+         15830337000 ch0 CS# high after 2 CK edges (0 data edges)
+         15830352000 ch0 CS# high after 2 CK edges (0 data edges)
+         15830366000 ch0 CS# high after 2 CK edges (0 data edges)
+         15830381000 ch0 CS# high after 2 CK edges (0 data edges)
+         15830396000 ch0 CS# high after 2 CK edges (0 data edges)
+         15830411000 ch0 CS# high after 2 CK edges (0 data edges)
+         15830426000 ch0 CS# high after 2 CK edges (0 data edges)
+         15830440000 ch0 CS# high after 2 CK edges (0 data edges)
+         15830455000 ch0 CS# high after 2 CK edges (0 data edges)
+         15830470000 ch0 CS# high after 2 CK edges (0 data edges)
+         15830485000 ch0 CS# high after 2 CK edges (0 data edges)
+         15830500000 ch0 CS# high after 2 CK edges (0 data edges)
+         15831779000 ch0 CA=9ffc080cfff8  READ MEM WRAPPED hw_addr=004060
+         15831863000 psram_ui_model ERROR ch0: cmd_en closer than TCMD to the previous command
+         15831985000 ch0 CS# high after 56 CK edges (0 data edges)
+         15833404000 psram_ui_model ERROR ch0: cmd_en closer than TCMD to the previous command
+         15833439000 ch0 CA=9ffc0810fff8  READ MEM WRAPPED hw_addr=004080
+         15833644000 ch0 CS# high after 56 CK edges (0 data edges)
+         15834980000 ch0 CA=1ffc0814fff8 WRITE MEM WRAPPED hw_addr=0040a0
+         15835152000 psram_ui_model ERROR ch0: cmd_en closer than TCMD to the previous command
+         15835185000 ch0 CS# high after 60 CK edges (0 data edges)
+         15835246000 ch0 CA=9ffc0814fff8  READ MEM WRAPPED hw_addr=0040a0
+         15835452000 ch0 CS# high after 60 CK edges (0 data edges)
+         15836728000 ch0 CA=9ffc0818fff8  READ MEM WRAPPED hw_addr=0040c0
+         15836900000 psram_ui_model ERROR ch0: cmd_en closer than TCMD to the previous command
+         15836934000 ch0 CS# high after 60 CK edges (0 data edges)
+         15836995000 ch0 CA=1ffc0818fff8 WRITE MEM WRAPPED hw_addr=0040c0
+         15837200000 ch0 CS# high after 60 CK edges (0 data edges)
+         15837884000 ch0 CA=9ffc0818fff8  READ MEM WRAPPED hw_addr=0040c0
+         15838089000 ch0 CS# high after 60 CK edges (0 data edges)
+         15838773000 ch0 CA=1ffc0816fff8 WRITE MEM WRAPPED hw_addr=0040b0
+         15838930000 psram_ui_model ERROR ch0: cmd_en closer than TCMD to the previous command
+         15838978000 ch0 CS# high after 60 CK edges (0 data edges)
+         15839024000 ch0 CA=zzzzzzzzfff8  RA@D @EE  @A@@A@ hw_addr=zzzzzZ
+         15839230000 ch0 CS# high after 60 CK edges (0 data edges)
+         15840506000 ch0 CA=9ffc081afff8  READ MEM WRAPPED hw_addr=0040d0
+         15840663000 psram_ui_model ERROR ch0: cmd_en closer than TCMD to the previous command
+         15840712000 ch0 CS# high after 60 CK edges (0 data edges)
+         15840758000 ch0 CA=zzzzzzzzfff8  RA@D @EE  @A@@A@ hw_addr=zzzzzZ
+         15840963000 ch0 CS# high after 60 CK edges (0 data edges)
+         15841647000 ch0 CA=9ffc081afff8  READ MEM WRAPPED hw_addr=0040d0
+         15841852000 ch0 CS# high after 60 CK edges (0 data edges)
+  W-W spacing 18: 1st write read back OK, 2nd write read back OK
+  W-W spacing 17: 1st write read back OK, 2nd write read back ALL ZERO (lost)
+  W-W spacing 16: 1st write read back OK, 2nd write read back ALL ZERO (lost)
+  W-W spacing 12: 1st write read back WRONG DATA, 2nd write read back ALL ZERO (lost)
+  W-W spacing 4: 1st write read back WRONG DATA, 2nd write read back ALL ZERO (lost)
+  W-W spacing 1: 1st write read back ALL ZERO (lost), 2nd write read back WRONG DATA
+  R-R spacing 18: 1st read OK (8 beats from +16), 2nd read OK (8 beats from +16)
+  R-R spacing 17: 1st read OK (8 beats from +16), 2nd read GARBLED (X) (8 beats from +16)
+  R-R spacing 16: 1st read OK (8 beats from +16), 2nd read GARBLED (X) (8 beats from +16)
+  R-R spacing 12: 1st read WRONG DATA (8 beats from +16), 2nd read GARBLED (X) (8 beats from +8)
+  R-R spacing 4: 1st read GARBLED (X) (8 beats from +16), 2nd read GARBLED (X) (8 beats from +12)
+  W-R same line spacing 18: read returns OK
+  R-W same line spacing 18: read returns OK (old data expected); line afterwards OK
+  W-R same line spacing 17: read returns GARBLED (X)
+  R-W same line spacing 17: read returns OK (old data expected); line afterwards WRONG DATA
+  model errors flagged in violation phases: 17
+
+==== SUMMARY: mismatches=0 stray=0 model_errors_legal=0 model_errors_violations=17
+RESULT: PASS
+/home/ivan/projects/tang_nano_9k_linux/verif/psram/tb_psram_ip.v:569: $finish called at 15842441368 (1ps)

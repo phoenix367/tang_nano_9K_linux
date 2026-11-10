@@ -1,0 +1,33 @@
+<?xml version="1" encoding="UTF-8"?>
+<!DOCTYPE gowin-fpga-project>
+<Project>
+    <Template>FPGA</Template>
+    <Version>5</Version>
+    <Device name="GW1NR-9C" pn="GW1NR-LV9QN88PC6/I5">gw1nr9c-004</Device>
+    <FileList>
+        <File path="kianv_nommu_cfg.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/kianv_harris_mc_edition.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/control_unit.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/datapath_unit.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/register_file.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/design_elements.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/alu.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/main_fsm.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/extend.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/alu_decoder.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/store_alignment.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/store_decoder.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/load_decoder.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/load_alignment.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/multiplier_extension_decoder.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/divider.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/multiplier.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/divider_decoder.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/multiplier_decoder.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/csr_exception_handler.v" type="file.verilog" enable="1"/>
+        <File path="../../external/kianRiscV/linux_socs/kianv_harris_mcycle_edition/kianv_harris_edition/csr_decoder.v" type="file.verilog" enable="1"/>
+        <File path="kianv_nommu_fit_top.v" type="file.verilog" enable="1"/>
+        <File path="../common/probe.cst" type="file.cst" enable="1"/>
+        <File path="../common/probe.sdc" type="file.sdc" enable="1"/>
+    </FileList>
+</Project>
