@@ -1,0 +1,103 @@
+
+QERV boot ROM
+> boot S
+[    0.000000] Linux version 6.18.7 (ivan@ivan-G5-5587) (riscv32-buildroot-linux-uclibc-gcc.br_real (Buildroot 2026.08.1) 15.3.0, GNU ld (GNU Binutils) 2.45.1) #2 Tue Nov 10 23:54:34 +04 2026
+[    0.000000] random: crng init done
+[    0.000000] Machine model: Tang Nano 9K QERV (MMU)
+[    0.000000] SBI specification v0.1 detected
+[    0.000000] earlycon: uart8250 at MMIO 0x10000000 (options '1000000')
+[    0.000000] printk: legacy bootconsole [uart8250] enabled
+[    0.000000] OF: reserved mem: 0x807fe000..0x807fefff (4 KiB) map non-reusable sbi@807fe000
+[    0.000000] OF: reserved mem: 0x80700000..0x80795fff (600 KiB) map non-reusable framebuffer@80700000
+[    0.000000] Zone ranges:
+[    0.000000]   Normal   [mem 0x0000000080000000-0x00000000807fffff]
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000080000000-0x00000000807fffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000080000000-0x00000000807fffff]
+[    0.000000] riscv: base ISA extensions aim
+[    0.000000] riscv: ELF capabilities aim
+[    0.000000] Ticket spinlock: enabled
+[    0.000000] Kernel command line: earlycon=uart8250,mmio,0x10000000,1000000 console=ttyS0
+[    0.000000] printk: log buffer data + meta data: 4096 + 12800 = 16896 bytes
+[    0.000000] Dentry cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.000000] Built 1 zonelists, mobility grouping off.  Total pages: 2048
+[    0.000000] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+[    0.000000] SLUB: HWalign=64, Order=0-1, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] riscv-intc: 32 local interrupts mapped
+[    0.000000] clocksource: riscv_clocksource: mask: 0xffffffffffffffff max_cycles: 0x1d854df40, max_idle_ns: 3526361616960 ns
+[    0.000288] sched_clock: 64 bits at 1000kHz, resolution 1000ns, wraps every 2199023255500ns
+[    0.053509] Console: colour dummy device 80x30
+[    0.065513] Calibrating delay loop (skipped), value calculated using timer frequency.. 2.00 BogoMIPS (lpj=10000)
+[    0.077943] pid_max: default: 4096 minimum: 301
+[    0.097725] Mount-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.109039] Mountpoint-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.408480] ASID allocator disabled (0 bits)
+[    0.485548] Memory: 4328K/8192K available (1844K kernel code, 109K rwdata, 192K rodata, 667K init, 52K bss, 3608K reserved, 0K cma-reserved)
+[    0.562893] devtmpfs: initialized
+[    0.931516] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604462750000 ns
+[    0.946818] posixtimers hash table entries: 512 (order: 0, 2048 bytes, linear)
+[    0.959029] futex hash table entries: 16 (256 bytes on 1 NUMA nodes, total 0 KiB, linear).
+[    1.751894] clocksource: Switched to clocksource riscv_clocksource
+[    2.890209] workingset: timestamp_bits=30 max_order=11 bucket_order=0
+[    3.080748] riscv-plic: interrupt-controller@12000000: mapped 1 interrupts with 1 handlers for 1 contexts.
+[    3.357575] Console: switching to colour QERV text 80x30
+[    3.757596] fb0: 640x480 RGB565 at 0x90700000, Y-wrap panning
+[    4.047532] Serial: 8250/16550 driver, 1 ports, IRQ sharing disabled
+[    4.523812] printk: legacy console [ttyS0] disabled
+[    4.819945] 10000000.serial: ttyS0 at MMIO 0x10000000 (irq = 1, base_baud = 1000000) is a 16550A
+[    4.840226] printk: legacy console [ttyS0] enabled
+[    4.840226] printk: legacy console [ttyS0] enabled
+[    4.858077] printk: legacy bootconsole [uart8250] disabled
+[    4.858077] printk: legacy bootconsole [uart8250] disabled
+[    6.755650] clk: Disabling unused clocks
+[   10.306233] Freeing unused kernel image (initmem) memory: 664K
+[   10.314981] Kernel memory protection not selected by kernel config.
+[   10.324124] Run /init as init process
+~ # dmesg | tail -40
+[    0.000000] printk: log buffer data + meta data: 4096 + 12800 = 16896 bytes
+[    0.000000] Dentry cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.000000] Built 1 zonelists, mobility grouping off.  Total pages: 2048
+[    0.000000] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+[    0.000000] SLUB: HWalign=64, Order=0-1, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] riscv-intc: 32 local interrupts mapped
+[    0.000000] clocksource: riscv_clocksource: mask: 0xffffffffffffffff max_cycles: 0x1d854df40, max_idle_ns: 3526361616960 ns
+[    0.000288] sched_clock: 64 bits at 1000kHz, resolution 1000ns, wraps every 2199023255500ns
+[    0.053509] Console: colour dummy device 80x30
+[    0.065513] Calibrating delay loop (skipped), value calculated using timer frequency.. 2.00 BogoMIPS (lpj=10000)
+[    0.077943] pid_max: default: 4096 minimum: 301
+[    0.097725] Mount-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.109039] Mountpoint-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.408480] ASID allocator disabled (0 bits)
+[    0.485548] Memory: 4328K/8192K available (1844K kernel code, 109K rwdata, 192K rodata, 667K init, 52K bss, 3608K reserved, 0K cma-reserved)
+[    0.562893] devtmpfs: initialized
+[    0.931516] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604462750000 ns
+[    0.946818] posixtimers hash table entries: 512 (order: 0, 2048 bytes, linear)
+[    0.959029] futex hash table entries: 16 (256 bytes on 1 NUMA nodes, total 0 KiB, linear).
+[    1.751894] clocksource: Switched to clocksource riscv_clocksource
+[    2.890209] workingset: timestamp_bits=30 max_order=11 bucket_order=0
+[    3.080748] riscv-plic: interrupt-controller@12000000: mapped 1 interrupts with 1 handlers for 1 contexts.
+[    3.357575] Console: switching to colour QERV text 80x30
+[    3.757596] fb0: 640x480 RGB565 at 0x90700000, Y-wrap panning
+[    4.047532] Serial: 8250/16550 driver, 1 ports, IRQ sharing disabled
+[    4.523812] printk: legacy console [ttyS0] disabled
+[    4.819945] 10000000.serial: ttyS0 at MMIO 0x10000000 (irq = 1, base_baud = 1000000) is a 16550A
+[    4.840226] printk: legacy console [ttyS0] enabled
+[    4.858077] printk: legacy bootconsole [uart8250] disabled
+[    6.755650] clk: Disabling unused clocks
+[   10.306233] Freeing unused kernel image (initmem) memory: 664K
+[   10.314981] Kernel memory protection not selected by kernel config.
+[   10.324124] Run /init as init process
+[   10.329007]   with arguments:
+[   10.333721]     /init
+[   10.336338]   with environment:
+[   10.338674]     HOME=/
+[   10.343648]     TERM=linux
+~ # printf "\033[1;33mYellow \033[0;44mBlue bg\033[0m \033[31mred\033[0m\012"
+[1;33mYellow [0;44mBlue bg[0m [31mred[0m
+~ # sleep 2
+~ # 

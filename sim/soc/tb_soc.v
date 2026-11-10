@@ -1,7 +1,8 @@
 // Simulation top for the QERV SoC (Verilator): soc_top + the PSRAM IP user-interface model + an SPI flash
 // model. The kernel can be preloaded into PSRAM (+psram_load0/1 +psram_addr0/1) or put in
 // the flash image (+flash_load) for the boot ROM to copy. sim_main.cpp drives the clock,
-// reset and UART RX, and watches the console tap.
+// reset and UART RX, and watches the console tap. VIDEO=1 adds the video controller: its
+// pixel clock/reset come from sim_main (+video) and its pixel stream goes back for frame dumps.
 `default_nettype none
 
 module tb_soc #(
@@ -10,10 +11,19 @@ module tb_soc #(
     parameter UART_BAUD    = 1000000,
     parameter CPU_W        = 4,
     parameter CPU_SMODE    = 0,
+    parameter VIDEO        = 0,
+    parameter FONT_FILE    = "font8x16.hex",
     parameter CALIB_CYCLES = 200
 ) (
     input  wire        clk,
     input  wire        rst,
+    input  wire        pclk,
+    input  wire        prst,
+    output wire        vde,
+    output wire        vhs,
+    output wire        vvs,
+    output wire [15:0] vpx,
+    output wire [31:0] vstat,             // video STATUS register
     input  wire        uart_rx,
     output wire        uart_tx,
     output wire        poweroff,
@@ -34,6 +44,7 @@ module tb_soc #(
   assign dbg_mode_m  = soc.cpu.core.cpu.gen_csr.csr.mode_m;
   assign dbg_new_irq = soc.cpu.core.cpu.gen_csr.csr.o_new_irq;
   assign dbg_mtip    = soc.mtip;
+  assign vstat       = soc.video_regs[95:64];   // STATUS
 
   wire        calib0, calib1;
   wire        cmd0, cmd_en0, cmd1, cmd_en1, rd_data_valid0, rd_data_valid1;
@@ -42,9 +53,18 @@ module tb_soc #(
   wire [ 3:0] data_mask0, data_mask1;
   wire        flash_sck, flash_cs_n, flash_mosi, flash_miso;
 
+  // I2C: open drain with pull-ups, a 24C02-like EEPROM at 0x50 (doc/peripherals.md)
+  wire i2c_scl_oe, i2c_sda_oe, eep_sda_oe;
+  wire i2c_scl = !i2c_scl_oe;
+  wire i2c_sda = !(i2c_sda_oe | eep_sda_oe);
+  i2c_eeprom_model #(.ADDR(7'h50)) eeprom (
+      .i_clk(clk), .i_scl(i2c_scl), .i_sda(i2c_sda), .o_sda_oe(eep_sda_oe));
+
   soc_top #(
       .CPU_W       (CPU_W),
       .CPU_SMODE   (CPU_SMODE[0]),
+      .VIDEO       (VIDEO[0]),
+      .FONT_FILE   (FONT_FILE),
       .CLK_HZ      (CLK_HZ),
       .UART_BAUD   (UART_BAUD),
       .BOOTROM_FILE(BOOTROM_FILE)
@@ -54,6 +74,14 @@ module tb_soc #(
       .o_uart_tx       (uart_tx),
       .i_uart_rx       (uart_rx),
       .o_poweroff      (poweroff),
+      .o_i2c_scl_oe    (i2c_scl_oe),
+      .i_i2c_scl       (i2c_scl),
+      .o_i2c_sda_oe    (i2c_sda_oe),
+      .i_i2c_sda       (i2c_sda),
+      .o_sd_sck        (),
+      .o_sd_mosi       (),
+      .o_sd_cs_n       (),
+      .i_sd_miso       (1'b1),              // empty slot
       .o_flash_sck     (flash_sck),
       .o_flash_cs_n    (flash_cs_n),
       .o_flash_mosi    (flash_mosi),
@@ -74,6 +102,15 @@ module tb_soc #(
       .o_data_mask1    (data_mask1),
       .i_rd_data1      (rd_data1),
       .i_rd_data_valid1(rd_data_valid1),
+      .i_pclk          (pclk),
+      .i_prst          (prst),
+      .o_tmds0         (),
+      .o_tmds1         (),
+      .o_tmds2         (),
+      .o_dbg_vde       (vde),
+      .o_dbg_vhs       (vhs),
+      .o_dbg_vvs       (vvs),
+      .o_dbg_vpx       (vpx),
       .i_clint_tick    (1'b0),
       .o_dbg_tx_push   (tx_push),
       .o_dbg_tx_byte   (tx_byte),

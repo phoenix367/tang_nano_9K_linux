@@ -1,0 +1,13 @@
+# <file system>	<mount pt>	<type>	<options>	<dump>	<pass>
+# Buildroot's skeleton entries (inittab mounts proc, sysfs and devpts itself)
+/dev/root	/		ext2	rw,noauto	0	1
+proc		/proc		proc	defaults	0	0
+devpts		/dev/pts	devpts	defaults,gid=5,mode=620,ptmxmode=0666	0	0
+tmpfs		/dev/shm	tmpfs	mode=1777	0	0
+tmpfs		/tmp		tmpfs	mode=1777	0	0
+tmpfs		/run		tmpfs	mode=0755,nosuid,nodev	0	0
+sysfs		/sys		sysfs	defaults	0	0
+# The microSD card (doc/peripherals.md): `mount /mnt`. usefree: statfs (df) takes the free
+# cluster count from the FAT32 info sector. Without it the first df after a mount reads the
+# whole FAT: 3.5 minutes for a 4 GB card over SPI, uninterruptible.
+/dev/mmcblk0p1	/mnt		vfat	noauto,usefree	0	0

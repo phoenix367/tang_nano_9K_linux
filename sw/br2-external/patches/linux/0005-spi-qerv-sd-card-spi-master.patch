@@ -1,0 +1,266 @@
+From: Tang Nano 9K QERV <noreply@localhost>
+Subject: [PATCH] spi: qerv, the QERV SoC SPI master (microSD slot), with hardware CRC
+
+The QERV SoC (Tang Nano 9K) has a small SPI master on the microSD slot (rtl/soc/spi_master.v):
+mode 0, one chip select, 8- and 32-bit data registers whose accesses wait on the bus while a
+transfer is in progress. With mmc_spi on top it gives the SD card as /dev/mmcblk0.
+
+It also computes the SD card's CRC16 (CRC-ITU-T) of the bits sent and received. Two optional
+hooks let mmc_spi use it (patch 0006): spi_controller.rx_crc_itu_t returns the CRC of a
+transfer's received data, and spi_transfer.tx_crc_itu_t sends the CRC of the previous
+transfer's data instead of tx_buf.
+---
+diff -Naur a/drivers/spi/Kconfig b/drivers/spi/Kconfig
+--- a/drivers/spi/Kconfig
++++ b/drivers/spi/Kconfig
+@@ -786,6 +786,13 @@
+ 	  mode. This controller is found on Intel (former Lantiq) SoCs like
+ 	  the Danube, Falcon, xRX200, xRX300, Lightning Mountain.
+ 
++config SPI_QERV
++	tristate "QERV SoC (Tang Nano 9K) SPI master"
++	depends on OF && HAS_IOMEM
++	help
++	  The SPI master of the QERV SoC on the Tang Nano 9K, wired to the
++	  microSD slot (use it with MMC_SPI).
++
+ config SPI_OC_TINY
+ 	tristate "OpenCores tiny SPI"
+ 	depends on GPIOLIB || COMPILE_TEST
+diff -Naur a/drivers/spi/Makefile b/drivers/spi/Makefile
+--- a/drivers/spi/Makefile
++++ b/drivers/spi/Makefile
+@@ -102,6 +102,7 @@
+ obj-$(CONFIG_SPI_NPCM_PSPI)		+= spi-npcm-pspi.o
+ obj-$(CONFIG_SPI_NXP_FLEXSPI)		+= spi-nxp-fspi.o
+ obj-$(CONFIG_SPI_OC_TINY)		+= spi-oc-tiny.o
++obj-$(CONFIG_SPI_QERV)			+= spi-qerv.o
+ spi-octeon-objs				:= spi-cavium.o spi-cavium-octeon.o
+ obj-$(CONFIG_SPI_OCTEON)		+= spi-octeon.o
+ obj-$(CONFIG_SPI_OMAP_UWIRE)		+= spi-omap-uwire.o
+diff -Naur a/drivers/spi/spi-qerv.c b/drivers/spi/spi-qerv.c
+--- a/drivers/spi/spi-qerv.c
++++ b/drivers/spi/spi-qerv.c
+@@ -0,0 +1,181 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * QERV SoC (Tang Nano 9K) SPI master for the microSD slot: mode 0, 8-bit words, one chip
++ * select, SCK = clk / (2 * (DIV + 1)). A data register access waits on the bus while a
++ * transfer is in progress, so the driver never polls: a write starts one or four bytes,
++ * a read returns what came back. The chip-select register write also lands only after the
++ * last bit. RTL: rtl/soc/spi_master.v.
++ *
++ * The hardware also computes the SD card's CRC16 (CRC-ITU-T) of the bits sent and received.
++ * The driver restarts it with every data transfer (more than two bytes) and keeps the result,
++ * which mmc_spi takes through spi_controller.rx_crc_itu_t (checking a data block) and
++ * spi_transfer.tx_crc_itu_t (sending a written block's CRC). In software, crc_itu_t() was a
++ * third of the time of an SD block read on this core.
++ *
++ * DT: compatible = "qerv,tang9k-spi"; reg; clock-frequency = <the SoC clock>.
++ */
++#include <linux/io.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/spi/spi.h>
++#include <linux/unaligned.h>
++
++#define QSPI_CTRL	0x00	/* 7:0 DIV, 8 CS line level */
++#define QSPI_STATUS	0x04	/* 0 busy */
++#define QSPI_DATA8	0x08
++#define QSPI_DATA32	0x0c	/* bits 7:0 go out first and come back first */
++#define QSPI_CRC	0x10	/* 31:16 CRC of the bits sent, 15:0 received; write: restart */
++#define CTRL_CS		BIT(8)
++#define CTRL_DIV	GENMASK(7, 0)
++
++struct qerv_spi {
++	void __iomem *base;
++	u32 clk_hz;
++	u32 ctrl;		/* CTRL as last written */
++	const struct spi_transfer *crc_xfer;	/* the last data transfer, */
++	u16 crc_rx, crc_tx;			/* the CRCs of what it received and sent */
++};
++
++static void qerv_spi_set_ctrl(struct qerv_spi *qs, u32 ctrl)
++{
++	if (ctrl != qs->ctrl) {
++		qs->ctrl = ctrl;
++		writel_relaxed(ctrl, qs->base + QSPI_CTRL);
++	}
++}
++
++/* the core passes the level of the chip-select line */
++static void qerv_spi_set_cs(struct spi_device *spi, bool high)
++{
++	struct qerv_spi *qs = spi_controller_get_devdata(spi->controller);
++
++	qerv_spi_set_ctrl(qs, high ? qs->ctrl | CTRL_CS : qs->ctrl & ~CTRL_CS);
++}
++
++static int qerv_spi_transfer_one(struct spi_controller *ctlr, struct spi_device *spi,
++				 struct spi_transfer *t)
++{
++	struct qerv_spi *qs = spi_controller_get_devdata(ctlr);
++	void __iomem *d8 = qs->base + QSPI_DATA8, *d32 = qs->base + QSPI_DATA32;
++	const u8 *tx = t->tx_buf;
++	u8 *rx = t->rx_buf;
++	unsigned int n = t->len;
++	u32 div = DIV_ROUND_UP(qs->clk_hz, 2 * t->speed_hz) - 1;
++
++	qerv_spi_set_ctrl(qs, (qs->ctrl & ~CTRL_DIV) | min(div, 255U));
++
++	/* a block's CRC, from the data transfer before (mmc_spi's write path) */
++	if (t->tx_crc_itu_t) {
++		for (unsigned int i = 0; i < n; i++) {
++			writel_relaxed(i < 2 ? (qs->crc_tx >> (8 - 8 * i)) & 0xff : 0xff, d8);
++			if (rx)
++				*rx++ = readl_relaxed(d8);
++		}
++		return 0;
++	}
++	/* a data transfer: restart the CRCs (the write waits for the bits before it) */
++	if (n > 2)
++		writel_relaxed(0, qs->base + QSPI_CRC);
++
++	/*
++	 * Four bytes per access. Word-aligned buffers (mmc_spi's block buffers) take plain word
++	 * loads and stores; the unaligned helpers cost four byte accesses and the shifts on this
++	 * core, three times the loop.
++	 */
++	if (IS_ALIGNED((unsigned long)tx | (unsigned long)rx, 4)) {
++		const __le32 *tx32 = (const __le32 *)tx;
++		__le32 *rx32 = (__le32 *)rx;
++
++		for (; n >= 4; n -= 4) {
++			writel_relaxed(tx32 ? le32_to_cpu(*tx32++) : 0xffffffff, d32);
++			if (rx32)
++				*rx32++ = cpu_to_le32(readl_relaxed(d32));
++		}
++		tx = (const u8 *)tx32;
++		rx = (u8 *)rx32;
++	}
++	for (; n >= 4; n -= 4) {
++		writel_relaxed(tx ? get_unaligned_le32(tx) : 0xffffffff, d32);
++		if (tx)
++			tx += 4;
++		if (rx) {
++			put_unaligned_le32(readl_relaxed(d32), rx);
++			rx += 4;
++		}
++	}
++	for (; n; n--) {
++		writel_relaxed(tx ? *tx++ : 0xff, d8);
++		if (rx)
++			*rx++ = readl_relaxed(d8);
++	}
++	if (t->len > 2) {
++		u32 crc = readl_relaxed(qs->base + QSPI_CRC);	/* waits for the last bits */
++
++		qs->crc_xfer = t;
++		qs->crc_rx = crc & 0xffff;
++		qs->crc_tx = crc >> 16;
++	}
++	return 0;
++}
++
++static int qerv_spi_rx_crc_itu_t(struct spi_device *spi, const struct spi_transfer *xfer,
++				 u16 *crc)
++{
++	struct qerv_spi *qs = spi_controller_get_devdata(spi->controller);
++
++	if (xfer != qs->crc_xfer)
++		return -ENODATA;
++	*crc = qs->crc_rx;
++	return 0;
++}
++
++static int qerv_spi_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct spi_controller *ctlr;
++	struct qerv_spi *qs;
++
++	ctlr = devm_spi_alloc_host(dev, sizeof(*qs));
++	if (!ctlr)
++		return -ENOMEM;
++	qs = spi_controller_get_devdata(ctlr);
++	qs->base = devm_platform_ioremap_resource(pdev, 0);
++	if (IS_ERR(qs->base))
++		return PTR_ERR(qs->base);
++	if (of_property_read_u32(dev->of_node, "clock-frequency", &qs->clk_hz) || !qs->clk_hz)
++		return dev_err_probe(dev, -EINVAL, "clock-frequency required\n");
++	qs->ctrl = CTRL_CS | CTRL_DIV;
++	writel_relaxed(qs->ctrl, qs->base + QSPI_CTRL);
++
++	ctlr->dev.of_node = dev->of_node;
++	ctlr->bus_num = -1;
++	ctlr->num_chipselect = 1;
++	ctlr->mode_bits = SPI_CS_HIGH;
++	ctlr->bits_per_word_mask = SPI_BPW_MASK(8);
++	ctlr->max_speed_hz = qs->clk_hz / 2;
++	ctlr->min_speed_hz = DIV_ROUND_UP(qs->clk_hz, 512);
++	ctlr->set_cs = qerv_spi_set_cs;
++	ctlr->transfer_one = qerv_spi_transfer_one;
++	ctlr->rx_crc_itu_t = qerv_spi_rx_crc_itu_t;
++	ctlr->tx_crc_itu_t = true;
++	return devm_spi_register_controller(dev, ctlr);
++}
++
++static const struct of_device_id qerv_spi_of_match[] = {
++	{ .compatible = "qerv,tang9k-spi" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, qerv_spi_of_match);
++
++static struct platform_driver qerv_spi_driver = {
++	.driver = {
++		.name = "qerv-spi",
++		.of_match_table = qerv_spi_of_match,
++	},
++	.probe = qerv_spi_probe,
++};
++module_platform_driver(qerv_spi_driver);
++
++MODULE_DESCRIPTION("QERV SoC (Tang Nano 9K) SPI master");
++MODULE_LICENSE("GPL");
+diff -Naur a/include/linux/spi/spi.h b/include/linux/spi/spi.h
+--- a/include/linux/spi/spi.h
++++ b/include/linux/spi/spi.h
+@@ -497,6 +497,11 @@
+  *                    Note: transfer_one and transfer_one_message are mutually
+  *                    exclusive; when both are set, the generic subsystem does
+  *                    not call your transfer_one callback.
++ * @rx_crc_itu_t: optional, for controllers that compute the CRC-ITU-T (CRC16-CCITT, initial
++ *	value 0; an SD card's data-block CRC) of the data they shift: returns 0 and the CRC of
++ *	the bits @xfer received if @xfer was the controller's last data transfer, else an
++ *	error. mmc_spi checks data blocks with it instead of crc_itu_t().
++ * @tx_crc_itu_t: the controller honours spi_transfer.tx_crc_itu_t.
+  * @handle_err: the subsystem calls the driver to handle an error that occurs
+  *		in the generic implementation of transfer_one_message().
+  * @mem_ops: optimized/dedicated operations for interactions with SPI memory.
+@@ -745,6 +750,8 @@
+ 	void (*set_cs)(struct spi_device *spi, bool enable);
+ 	int (*transfer_one)(struct spi_controller *ctlr, struct spi_device *spi,
+ 			    struct spi_transfer *transfer);
++	int (*rx_crc_itu_t)(struct spi_device *spi, const struct spi_transfer *xfer, u16 *crc);
++	bool tx_crc_itu_t;
+ 	void (*handle_err)(struct spi_controller *ctlr,
+ 			   struct spi_message *message);
+ 
+@@ -1009,6 +1016,8 @@
+  *	transmit confirmation from the controller for the "post" word.
+  * @dtr_mode: true if supports double transfer rate.
+  * @timestamped: true if the transfer has been timestamped
++ * @tx_crc_itu_t: send the CRC-ITU-T (initial value 0) of the previous transfer's transmitted
++ *	data, 2 bytes MSB first, instead of @tx_buf. Only for controllers with tx_crc_itu_t.
+  * @error: Error status logged by SPI controller driver.
+  *
+  * SPI transfers always write the same number of bytes as they read.
+@@ -1096,6 +1105,7 @@
+ 	unsigned	tx_nbits:4;
+ 	unsigned	rx_nbits:4;
+ 	unsigned	timestamped:1;
++	unsigned	tx_crc_itu_t:1;
+ 	bool		dtr_mode;
+ #define	SPI_NBITS_SINGLE	0x01 /* 1-bit transfer */
+ #define	SPI_NBITS_DUAL		0x02 /* 2-bit transfer */

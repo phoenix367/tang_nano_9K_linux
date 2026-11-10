@@ -1,0 +1,8 @@
+# MMU image (doc/stage2_plan.md, doc/video_plan.md): as board/tang9k's, plus devpts (ptys for
+# `script`) and the console shell mirrored onto the HDMI text console.
+::sysinit:/bin/mount -t proc proc /proc
+::sysinit:/bin/mount -t sysfs sysfs /sys
+::sysinit:/bin/mkdir -p /dev/pts
+::sysinit:/bin/mount -t devpts devpts /dev/pts
+console::respawn:/usr/bin/console-shell
+::shutdown:/bin/umount -a -r

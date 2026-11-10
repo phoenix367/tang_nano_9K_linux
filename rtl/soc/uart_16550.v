@@ -1,23 +1,28 @@
 // Minimal 16550-compatible UART for the QERV SoC (Linux 8250 driver, DT "ns16550a",
-// reg-shift 0, reg-io-width 1, polled: no interrupt line).
+// reg-shift 0, reg-io-width 1). o_irq goes to the PLIC (source 1); without it (stage 1, the
+// boot ROM) the driver polls.
 //
 // Registers at byte offsets 0..7 (DLAB = LCR[7] maps 0/1 to DLL/DLM):
 //   0 RBR (read) / THR (write)   1 IER   2 IIR (read) / FCR (write)   3 LCR
 //   4 MCR   5 LSR   6 MSR   7 SCR
-// 16-byte TX and RX FIFOs (the driver writes up to 16 bytes per THRE for a 16550A). The baud
+// 2^FIFO_L2-byte TX and RX FIFOs in block RAM (DT fifo-size: the driver writes up to that
+// many bytes per THRE; a deep RX FIFO rides out the interrupt latency). The baud
 // rate is fixed by CLKS_PER_BIT; DLL/DLM are storage only. 8N1 framing. IER, LCR, MCR, SCR
 // are read/write storage; MSR reports CTS/DSR/DCD asserted. Bus: Wishbone classic, byte
 // accesses, registered ack.
 //
-// IIR must report pending sources even without an interrupt line: the polled 8250 driver
-// calls its IRQ handler from a timer, and that handler returns at once if IIR says "no
-// interrupt". Sources, by priority, gated by IER like a real 16550: received data (0x04)
-// when IER[0] and the RX FIFO is not empty, THR empty (0x02) when IER[1] and the TX FIFO
-// is empty; else 0x01. Bits 7:6 follow FCR[0] (FIFOs enabled).
+// Interrupt sources, by priority, gated by IER like a real 16550 and level-sensitive (each
+// holds while its condition does): receiver line status (0x06) when IER[2] and an overrun is
+// pending, received data (0x04) when IER[0] and the RX FIFO is not empty, THR empty (0x02)
+// when IER[1] and the TX FIFO is empty; else 0x01. o_irq (registered) is any of them. IIR
+// reports them whether or not the line is used: the polled 8250 driver calls its handler
+// from a timer, and that handler returns at once if IIR says "no interrupt". Bits 7:6
+// follow FCR[0] (FIFOs enabled).
 `default_nettype none
 
 module uart_16550 #(
-    parameter CLKS_PER_BIT = 27   // e.g. 27 MHz / 1 Mbaud
+    parameter CLKS_PER_BIT = 27,  // e.g. 27 MHz / 1 Mbaud
+    parameter FIFO_L2      = 8    // 256-byte FIFOs
 ) (
     input  wire        i_clk,
     input  wire        i_rst,
@@ -30,6 +35,7 @@ module uart_16550 #(
     output reg         o_ack,
     output reg         o_tx,
     input  wire        i_rx,
+    output reg         o_irq,
     // simulation console tap: a byte written to THR
     output wire        o_tx_push,
     output wire [ 7:0] o_tx_byte
@@ -47,12 +53,18 @@ module uart_16550 #(
   reg        fifo_en;
   wire       dlab = lcr[7];
 
+  localparam DEPTH = 1 << FIFO_L2;
+
   // ---------------------------------------------------------------- TX FIFO + serializer
-  reg  [7:0] txf[0:15];
-  reg  [4:0] tx_wp, tx_rp;
-  wire [4:0] tx_count = tx_wp - tx_rp;
-  wire       tx_empty = tx_count == 5'd0;
-  wire       tx_full = tx_count == 5'd16;
+  // Block RAM read one cycle late: tx_head = txf[tx_rp] as of the last cycle, valid once the
+  // FIFO has not been empty for a cycle (tx_ready)
+  reg  [7:0] txf[0:DEPTH-1];
+  reg  [FIFO_L2:0] tx_wp, tx_rp;
+  wire [FIFO_L2:0] tx_count = tx_wp - tx_rp;
+  wire       tx_empty = tx_count == 0;
+  wire       tx_full = tx_count == DEPTH;
+  reg  [7:0] tx_head;
+  reg        tx_ready;
 
   assign o_tx_push = wr & (rsel == 3'd0) & !dlab & !tx_full;
   assign o_tx_byte = wbyte;
@@ -64,14 +76,16 @@ module uart_16550 #(
 
   always @(posedge i_clk) begin
     if (o_tx_push) begin
-      txf[tx_wp[3:0]] <= wbyte;
-      tx_wp <= tx_wp + 5'd1;
+      txf[tx_wp[FIFO_L2-1:0]] <= wbyte;
+      tx_wp <= tx_wp + 1'b1;
     end
+    tx_head  <= txf[tx_rp[FIFO_L2-1:0]];
+    tx_ready <= !tx_empty;
     if (tx_idle) begin
       o_tx <= 1'b1;
-      if (!tx_empty) begin
-        tx_shift <= {1'b1, txf[tx_rp[3:0]], 1'b0};
-        tx_rp    <= tx_rp + 5'd1;
+      if (!tx_empty & tx_ready) begin
+        tx_shift <= {1'b1, tx_head, 1'b0};
+        tx_rp    <= tx_rp + 1'b1;
         tx_bits  <= 4'd10;
         tx_div   <= 16'd0;
       end
@@ -86,20 +100,23 @@ module uart_16550 #(
     end
     if (wr & (rsel == 3'd2) & i_dat[8*lane+2]) tx_rp <= tx_wp;   // FCR: clear TX FIFO
     if (i_rst) begin
-      tx_wp   <= 5'd0;
-      tx_rp   <= 5'd0;
-      tx_bits <= 4'd0;
-      o_tx    <= 1'b1;
+      tx_wp    <= 0;
+      tx_rp    <= 0;
+      tx_bits  <= 4'd0;
+      tx_ready <= 1'b0;
+      o_tx     <= 1'b1;
     end
   end
 
   // ---------------------------------------------------------------- RX deserializer + FIFO
   reg  [2:0] rx_sync;
   wire       rx = rx_sync[2];
-  reg  [7:0] rxf[0:15];
-  reg  [4:0] rx_wp, rx_rp;
+  // rx_head = rxf[rx_rp] one cycle late; the bus reads RBR many cycles after any change
+  reg  [7:0] rxf[0:DEPTH-1];
+  reg  [FIFO_L2:0] rx_wp, rx_rp;
   wire       rx_empty = rx_wp == rx_rp;
-  wire       rx_full = (rx_wp - rx_rp) == 5'd16;
+  wire       rx_full = (rx_wp - rx_rp) == DEPTH;
+  reg  [7:0] rx_head;
   reg  [3:0] rx_bits;                           // 0 = waiting for a start bit
   reg [15:0] rx_div;
   reg  [7:0] rx_shift;
@@ -123,8 +140,8 @@ module uart_16550 #(
         if (rx) begin                           // valid stop bit
           if (rx_full) rx_overrun <= 1'b1;
           else begin
-            rxf[rx_wp[3:0]] <= rx_shift;
-            rx_wp <= rx_wp + 5'd1;
+            rxf[rx_wp[FIFO_L2-1:0]] <= rx_shift;
+            rx_wp <= rx_wp + 1'b1;
           end
         end
       end else begin
@@ -134,27 +151,31 @@ module uart_16550 #(
     end else
       rx_div <= rx_div + 16'd1;
 
-    if (rx_pop) rx_rp <= rx_rp + 5'd1;
+    rx_head <= rxf[rx_rp[FIFO_L2-1:0]];
+    if (rx_pop) rx_rp <= rx_rp + 1'b1;
     if (wr & (rsel == 3'd2) & i_dat[8*lane+1]) rx_rp <= rx_wp;   // FCR: clear RX FIFO
     if (rd & (rsel == 3'd5)) rx_overrun <= 1'b0;
     if (i_rst) begin
       rx_sync    <= 3'b111;
       rx_bits    <= 4'd0;
-      rx_wp      <= 5'd0;
-      rx_rp      <= 5'd0;
+      rx_wp      <= 0;
+      rx_rp      <= 0;
       rx_overrun <= 1'b0;
     end
   end
 
   // ---------------------------------------------------------------- registers
   wire [7:0] lsr = {1'b0, tx_empty & tx_idle, tx_empty, 3'b000, rx_overrun, !rx_empty};
+  wire       irq_ls  = ier[2] & rx_overrun;
+  wire       irq_rx  = ier[0] & !rx_empty;
+  wire       irq_thr = ier[1] & tx_empty;
+  wire [3:0] iid = irq_ls ? 4'h6 : irq_rx ? 4'h4 : irq_thr ? 4'h2 : 4'h1;
   reg  [7:0] rbyte;
   always @(*) begin
     case (rsel)
-      3'd0: rbyte = dlab ? dll : rxf[rx_rp[3:0]];
+      3'd0: rbyte = dlab ? dll : rx_head;
       3'd1: rbyte = dlab ? dlm : ier;
-      3'd2: rbyte = {fifo_en, fifo_en, 2'b00,
-                     (ier[0] & !rx_empty) ? 4'h4 : (ier[1] & tx_empty) ? 4'h2 : 4'h1};
+      3'd2: rbyte = {fifo_en, fifo_en, 2'b00, iid};
       3'd3: rbyte = lcr;
       3'd4: rbyte = mcr;
       3'd5: rbyte = lsr;
@@ -166,6 +187,7 @@ module uart_16550 #(
   always @(posedge i_clk) begin
     o_ack <= i_cyc & !o_ack;
     o_rdt <= {4{rbyte}};
+    o_irq <= irq_ls | irq_rx | irq_thr;
     if (wr)
       case (rsel)
         3'd0: if (dlab) dll <= wbyte;
@@ -178,6 +200,7 @@ module uart_16550 #(
       endcase
     if (i_rst) begin
       o_ack   <= 1'b0;
+      o_irq   <= 1'b0;
       ier     <= 8'd0;
       lcr     <= 8'd0;
       mcr     <= 8'd0;

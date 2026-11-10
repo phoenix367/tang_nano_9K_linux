@@ -1,6 +1,6 @@
 // Unified L1 cache for the QERV SoC: direct-mapped, write-back, write-allocate, 32-byte lines,
-// between the CPU bus and the Gowin PSRAM HS 2ch IP user interface. Everything runs on one
-// clock (the IP's clk_out) - no clock-domain crossing.
+// between the CPU bus and the Gowin PSRAM HS 2ch IP, whose commands go through psram_arb
+// (shared with the video DMA). Everything runs on one clock (the IP's clk_out).
 //
 // One cache for instructions and data is enough because SERV never has a fetch and a data
 // access outstanding at the same time; it also makes fence.i a no-op (no I/D coherence).
@@ -11,18 +11,21 @@
 // dirty (one 8-beat PSRAM write burst streamed out of the data RAM), fill the line (one
 // 8-beat read burst streamed into the data RAM), then look up again.
 //
-// PSRAM side, per the IP's user protocol (see rtl/sim/psram_ui_model.v / verif/psram):
-//   write: cmd_en=1, cmd=1, addr, wr_data = beat 0 in one cycle, beats 1..7 on the next
-//          seven cycles; read: cmd_en=1, cmd=0, addr, then 8 beats flagged by rd_data_valid;
-//   at least TCMD cycles between commands; addr in 16-bit units, 4 MB per channel.
-// Byte address bit 22 selects the channel. All IP inputs are registered here (a uniform
-// one-cycle pipeline stage, as the ov7670 design does for timing).
+// Uncached alias (i_unc, CPU address 0x9xxx_xxxx): one PSRAM burst per access, no lookup.
+// A write is a burst with only beat 0 enabled (data_mask from i_sel), acked as soon as it is
+// granted (posted); a read takes beat 0 of a burst at the word's address (bursts wrap inside
+// their 32-byte group, so beat 0 is that word) and then waits out the other seven beats.
+// Used for the video framebuffer, which the display DMA reads straight from PSRAM: software
+// must not reach the same memory through the cached window as well.
+//
+// PSRAM side (psram_arb, rtl/sim/psram_ui_model.v): o_req asks for a command, granted by
+// i_gnt in the same cycle; write beat k is o_wdata/o_wmask k cycles after the grant (mask
+// bit = 1: byte not written); a read's 8 beats come back on i_rvalid/i_rdata. Byte address
+// bit 22 selects the channel; the arbiter keeps the command spacing (TCMD).
 `default_nettype none
 
 module l1_cache #(
-    parameter       LINES     = 512,      // 512 x 32 B = 16 KB
-    parameter       TCMD      = 19,       // IP command spacing for 32-byte bursts
-    parameter [3:0] MASK_NONE = 4'b0000   // data_mask value that writes all four bytes
+    parameter       LINES     = 512       // 512 x 32 B = 16 KB
 ) (
     input  wire        i_clk,
     input  wire        i_rst,
@@ -32,24 +35,18 @@ module l1_cache #(
     input  wire [ 3:0] i_sel,
     input  wire        i_we,
     input  wire        i_cyc,
+    input  wire        i_unc,             // uncached alias
     output reg  [31:0] o_rdt,
     output reg         o_ack,
-    // PSRAM IP user interface
-    input  wire        i_calib,           // init_calib0 & init_calib1
-    output reg         o_cmd0,
-    output reg         o_cmd_en0,
-    output reg  [20:0] o_addr0,
-    output reg  [31:0] o_wr_data0,
-    output reg  [ 3:0] o_data_mask0,
-    input  wire [31:0] i_rd_data0,
-    input  wire        i_rd_data_valid0,
-    output reg         o_cmd1,
-    output reg         o_cmd_en1,
-    output reg  [20:0] o_addr1,
-    output reg  [31:0] o_wr_data1,
-    output reg  [ 3:0] o_data_mask1,
-    input  wire [31:0] i_rd_data1,
-    input  wire        i_rd_data_valid1,
+    // PSRAM commands (psram_arb)
+    output reg         o_req,
+    output reg         o_req_we,
+    output reg  [22:2] o_req_adr,
+    input  wire        i_gnt,
+    output wire [31:0] o_wdata,
+    output reg  [ 3:0] o_wmask,
+    input  wire        i_rvalid,
+    input  wire [31:0] i_rdata,
     // statistics (free-running, for software/bring-up)
     output reg  [31:0] o_hits,
     output reg  [31:0] o_misses,
@@ -59,15 +56,20 @@ module l1_cache #(
   localparam IW = $clog2(LINES);          // index bits
   localparam TW = 23 - 5 - IW;            // tag bits
 
-  localparam [2:0] S_IDLE = 3'd0, S_LOOKUP = 3'd1, S_WB_PRE = 3'd2, S_WB_GO = 3'd3,
-                   S_WB_BURST = 3'd4, S_FILL_CMD = 3'd5, S_FILL_DATA = 3'd6, S_RELOOKUP = 3'd7;
+  localparam [3:0] S_IDLE = 4'd0, S_LOOKUP = 4'd1, S_WB_PRE = 4'd2, S_WB_GO = 4'd3,
+                   S_WB_BURST = 4'd4, S_FILL_CMD = 4'd5, S_FILL_DATA = 4'd6, S_RELOOKUP = 4'd7,
+                   S_UNC_CMD = 4'd8, S_UNC_DATA = 4'd9, S_UNC_DRAIN = 4'd10;
 
-  reg  [2:0] state;
+  reg  [3:0] state;
   reg  [2:0] beat;
   reg  [IW-1:0] idx;                      // line being written back / filled
   reg  [TW-1:0] victim_tag;
-  reg  [5:0] tcmd_cnt;
-  wire       tcmd_ok = (tcmd_cnt == 6'd0);
+  reg  [TW-1:0] fill_tag;                 // tag of the missing line (latched: the PSRAM
+                                          // command path starts from registers)
+  reg  [22:2]   unc_adr;                  // uncached request, latched the same way
+  reg  [31:0]   unc_dat;
+  reg  [ 3:0]   unc_sel;
+  reg           unc_we;
 
   wire [2:0]    cpu_word = i_adr[4:2];
   wire [IW-1:0] cpu_idx  = i_adr[5+IW-1:5];
@@ -112,13 +114,12 @@ module l1_cache #(
   wire          hit     = t_valid & (t_tag == cpu_tag);
 
   // ---------------------------------------------------------------- PSRAM command
-  reg        rd_ch;                       // channel of the outstanding fill
-  wire       rd_valid = rd_ch ? i_rd_data_valid1 : i_rd_data_valid0;
-  wire [31:0] rd_data = rd_ch ? i_rd_data1 : i_rd_data0;
-
-  reg         issue;                      // combinational: start a PSRAM command now
-  reg         issue_we;
-  reg  [22:5] issue_line;                 // byte address of the line
+  wire        rd_valid = i_rvalid;
+  wire [31:0] rd_data  = i_rdata;
+  wire        issue    = o_req & i_gnt;   // a PSRAM command starts now
+  // write stream: dq holds burst beat k in the k-th cycle after the grant; an uncached
+  // write sends the CPU's word as beat 0
+  assign o_wdata = (state == S_UNC_CMD) ? unc_dat : dq;
 
   // ---------------------------------------------------------------- control
   always @(*) begin
@@ -129,9 +130,12 @@ module l1_cache #(
     taddr    = cpu_idx;
     twe      = 1'b0;
     twd      = {1'b1, 1'b1, cpu_tag};
-    issue    = 1'b0;
-    issue_we = 1'b0;
-    issue_line = {victim_tag, idx};
+    o_req     = 1'b0;
+    o_req_we  = 1'b0;
+    o_req_adr = {victim_tag, idx, 3'd0};
+    // no byte written outside a write's own beats: both channels see this one stream, and
+    // a write waiting for its grant must not touch the tail of the one before it
+    o_wmask   = 4'b1111;
 
     case (state)
       S_LOOKUP:
@@ -141,26 +145,35 @@ module l1_cache #(
         end
       S_WB_PRE:  daddr = {idx, 3'd0};
       S_WB_GO: begin
-        daddr = {idx, 3'd0};              // hold word 0 on dq while waiting
-        if (tcmd_ok & i_calib) begin
-          issue      = 1'b1;
-          issue_we   = 1'b1;
-          issue_line = {victim_tag, idx};
-          daddr      = {idx, 3'd1};       // beat 0 is on dq now, prefetch beat 1
+        daddr     = {idx, 3'd0};          // hold word 0 on dq while waiting
+        o_req     = 1'b1;
+        o_req_we  = 1'b1;
+        o_req_adr = {victim_tag, idx, 3'd0};
+        if (i_gnt) begin
+          o_wmask = 4'b0000;
+          daddr   = {idx, 3'd1};          // beat 0 is on dq now, prefetch beat 1
         end
       end
-      S_WB_BURST: daddr = {idx, beat + 3'd1};
-      S_FILL_CMD:
-        if (tcmd_ok & i_calib) begin
-          issue      = 1'b1;
-          issue_line = {cpu_tag, idx};
-        end
+      S_WB_BURST: begin
+        daddr   = {idx, beat + 3'd1};
+        o_wmask = 4'b0000;
+      end
+      S_FILL_CMD: begin
+        o_req     = 1'b1;
+        o_req_adr = {fill_tag, idx, 3'd0};
+      end
+      S_UNC_CMD: begin
+        o_req     = 1'b1;
+        o_req_we  = unc_we;
+        o_req_adr = unc_adr;
+        if (i_gnt & unc_we) o_wmask = ~unc_sel;
+      end
       S_FILL_DATA: begin
         daddr = {idx, beat};
         dwd   = rd_data;
         if (rd_valid) dwe = 4'b1111;
         taddr = idx;
-        twd   = {1'b1, 1'b0, cpu_tag};
+        twd   = {1'b1, 1'b0, fill_tag};
         twe   = rd_valid & (beat == 3'd7);
       end
       default: ;
@@ -169,12 +182,17 @@ module l1_cache #(
 
   always @(posedge i_clk) begin
     o_ack <= 1'b0;
-    if (tcmd_cnt != 6'd0) tcmd_cnt <= tcmd_cnt - 6'd1;
-    if (issue) tcmd_cnt <= TCMD[5:0] - 6'd1;
 
     case (state)
       // a request still held in the cycle after its ack is not a new one
-      S_IDLE, S_RELOOKUP: if (i_cyc & !o_ack) state <= S_LOOKUP;
+      S_IDLE, S_RELOOKUP:
+        if (i_cyc & !o_ack) begin
+          state   <= i_unc ? S_UNC_CMD : S_LOOKUP;
+          unc_adr <= i_adr[22:2];
+          unc_dat <= i_dat;
+          unc_sel <= i_sel;
+          unc_we  <= i_we;
+        end
       S_LOOKUP:
         if (hit) begin
           o_rdt  <= dq;
@@ -184,6 +202,7 @@ module l1_cache #(
         end else begin
           idx        <= cpu_idx;
           victim_tag <= t_tag;
+          fill_tag   <= cpu_tag;
           o_misses   <= o_misses + 32'd1;
           if (t_valid & t_dirty) begin
             o_writebacks <= o_writebacks + 32'd1;
@@ -204,7 +223,6 @@ module l1_cache #(
       S_FILL_CMD:
         if (issue) begin
           beat  <= 3'd0;
-          rd_ch <= cpu_tag[TW-1];         // byte address bit 22
           state <= S_FILL_DATA;
         end
       S_FILL_DATA:
@@ -212,31 +230,31 @@ module l1_cache #(
           beat <= beat + 3'd1;
           if (beat == 3'd7) state <= S_RELOOKUP;
         end
+      S_UNC_CMD:
+        if (issue) begin
+          if (unc_we) begin
+            o_ack <= 1'b1;                // posted write
+            state <= S_IDLE;
+          end else state <= S_UNC_DATA;
+        end
+      S_UNC_DATA:
+        if (rd_valid) begin
+          o_rdt <= rd_data;
+          o_ack <= 1'b1;
+          beat  <= 3'd1;
+          state <= S_UNC_DRAIN;
+        end
+      S_UNC_DRAIN:                        // the other seven beats of the burst
+        if (rd_valid) begin
+          beat <= beat + 3'd1;
+          if (beat == 3'd7) state <= S_IDLE;
+        end
       default: state <= S_IDLE;
     endcase
 
-    // registered IP inputs
-    o_cmd_en0 <= issue & !issue_line[22];
-    o_cmd_en1 <= issue & issue_line[22];
-    if (issue) begin
-      o_cmd0  <= issue_we;
-      o_cmd1  <= issue_we;
-      o_addr0 <= {issue_line[21:5], 4'b0000};
-      o_addr1 <= {issue_line[21:5], 4'b0000};
-    end
-    // dq holds burst beat k in the k-th cycle after the issue cycle, so the registered
-    // wr_data presents beats 0..7 on the command cycle and the seven after it
-    o_wr_data0   <= dq;
-    o_wr_data1   <= dq;
-    o_data_mask0 <= MASK_NONE;
-    o_data_mask1 <= MASK_NONE;
-
     if (i_rst) begin
       state        <= S_IDLE;
-      tcmd_cnt     <= 6'd0;
       o_ack        <= 1'b0;
-      o_cmd_en0    <= 1'b0;
-      o_cmd_en1    <= 1'b0;
       o_hits       <= 32'd0;
       o_misses     <= 32'd0;
       o_writebacks <= 32'd0;

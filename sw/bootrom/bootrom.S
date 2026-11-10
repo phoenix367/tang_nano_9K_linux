@@ -17,9 +17,12 @@
 #   f                            copy Image + DTB from the SPI flash (sw/mkflash.py layout),
 #                                then boot (in S-mode if header flag bit 0 is set)
 #   q / r                        SYSCON poweroff / reboot
-#   s                            status: the 7 SYSCON status words (soc_top.v): PSRAM calib
+#   s                            status: SYSCON status words 0-10 (soc_top.v): PSRAM calib
 #                                bits, commands and read beats per channel, cache misses and
-#                                write-backs. Touches no PSRAM.
+#                                write-backs, 0, video CTRL, BASE, STATUS. Touches no PSRAM.
+#   v <base>                     video (doc/video_plan.md): scan out the RGB565 framebuffer at
+#                                physical address base; base 0 = colour bars again. Load an
+#                                image first through the uncached alias (base + 0x10000000).
 #
 # m, c, b and f first wait up to 0.5 s for both PSRAM channels to calibrate, else print
 # "psram not calibrated" and the status. l does not check (its data would be read as
@@ -38,9 +41,18 @@
 # it (add_bootloader_randomness), so its crng is ready at once; unseeded, every random number
 # drawn during boot ran a full entropy extraction (~1.3 s of the boot).
 #
+# Video: with the video controller present (its CTRL register reads non-zero):
+#   - At reset, if the flash holds a boot splash (sw/mkflash.py --splash: header word 4 "SPLH",
+#     then offset and length of a run-length list of {count << 16 | rgb565}), it is drawn
+#     into the framebuffer at FB_BASE (through the uncached alias, ~0.2 s) and scanned out.
+#   - Entering a kernel, a framebuffer that is not on yet (CTRL still TEST: no splash, no v)
+#     is cleared and turned on; one that is on is kept, so the splash stays up while Linux
+#     boots (simple-framebuffer expects the firmware to have set up the display).
+#
 # SBI v0.1 shim (M-mode, for the S-mode kernel): mtvec = sbi_trap, stack at the top of the
 # reserved page SBI_STACK - 4 KB (the DT keeps Linux out of it). Delegated to S: misaligned
-# accesses, breakpoints, user ecalls, page faults, the S timer interrupt. Calls (a7 = EID,
+# accesses, breakpoints, user ecalls, page faults, the S timer interrupt and the S external
+# interrupt (the PLIC, which the kernel drives itself). Calls (a7 = EID,
 # legacy): 0 set_timer(a0 = low, a1 = high), 1 console_putchar(a0), 2 console_getchar,
 # 8 shutdown; anything else returns SBI_ERR_NOT_SUPPORTED, so Linux sees SBI v0.1. The M
 # timer interrupt is handed to S: clear MTIE, set STIP; set_timer clears STIP and sets MTIE.
@@ -53,6 +65,12 @@
 #define LSR_THRE  0x20
 #define MTIME     0x1100BFF8
 #define SYSCON    0x11100000
+#define VID_CTRL  0x11100020          /* SYSCON word 8; 0 without the video controller */
+#define VID_BASE  0x11100024
+#define FB_BASE   0x80700000          /* 640 x 480 x 2 B framebuffer (DT reserved, no-map) */
+#define FB_UNC    0x90700000          /* the same, uncached alias */
+#define FB_BYTES  614400
+#define SPLH      0x484C5053          /* "SPLH" little-endian */
 #define FLASH     0x20000000
 #define MAGIC     0x4c565251          /* "QRVL" little-endian */
 #define RAM_BASE  0x80000000
@@ -69,6 +87,7 @@ _start:
     li    s0, UART
     la    a0, msg_banner
     jal   puts
+    jal   splash
     li    s1, 1
     li    t0, MTIME
     lw    s2, 0(t0)
@@ -118,11 +137,24 @@ got_cmd:
     beq   t0, t1, 1f
     li    t1, 's'
     beq   t0, t1, cmd_status
+    li    t1, 'v'
+    beq   t0, t1, cmd_video
     la    a0, msg_what
     jal   puts
     j     prompt
 1:  li    t1, SYSCON
     sw    t2, 0(t1)
+    j     prompt
+
+# ---------------------------------------------------------------- v: video
+cmd_video:
+    jal   get32
+    li    t0, VID_CTRL
+    li    t1, 2                       # colour bars
+    beqz  a0, 1f
+    sw    a0, 4(t0)                   # BASE
+    li    t1, 1                       # framebuffer
+1:  sw    t1, 0(t0)
     j     prompt
 
 # ---------------------------------------------------------------- l: load
@@ -326,6 +358,7 @@ cmd_flash:
 boot:
     jal   psram_ready
     jal   seed_dtb
+    jal   video_on
     la    a0, msg_boot
     jal   puts
     li    a0, 0
@@ -338,6 +371,7 @@ cmd_boot_s:
     jal   psram_ready
 boot_s:
     jal   seed_dtb
+    jal   video_on
     la    a0, msg_boot_s
     jal   puts
     la    t0, sbi_trap
@@ -346,7 +380,7 @@ boot_s:
     csrw  mscratch, t0
     li    t0, 0xB159                  # misaligned, breakpoint, U ecall, page faults
     csrw  medeleg, t0
-    li    t0, 0x20                    # S timer
+    li    t0, 0x220                   # S timer, S external (PLIC)
     csrw  mideleg, t0
     csrw  mie, zero
     csrw  satp, zero
@@ -481,6 +515,100 @@ seed_dtb:
     sw    t4, 0(t0)
 9:  ret
 
+# video_on: if the video controller is there and not scanning the framebuffer yet, clear the
+# framebuffer (uncached, 4 words per loop: ~0.1 s) and scan it out. Uses t0-t2.
+video_on:
+    li    t0, VID_CTRL
+    lw    t1, 0(t0)
+    andi  t1, t1, 2                   # TEST: bars, the framebuffer was not set up
+    beqz  t1, 2f
+    li    t1, FB_UNC
+    li    t2, FB_UNC + FB_BYTES
+1:  sw    zero, 0(t1)
+    sw    zero, 4(t1)
+    sw    zero, 8(t1)
+    sw    zero, 12(t1)
+    addi  t1, t1, 16
+    bltu  t1, t2, 1b
+    li    t1, FB_BASE
+    sw    t1, 4(t0)
+    li    t1, 1
+    sw    t1, 0(t0)
+2:  ret
+
+# splash: with video and a flash splash, wait for the PSRAM (up to 0.5 s; skip without it),
+# draw the run-length list into the framebuffer and scan it out. Uses t0-t6, a0-a3.
+splash:
+    li    t0, VID_CTRL
+    lw    t0, 0(t0)
+    beqz  t0, 9f                      # no video controller
+    li    a0, FLASH
+    lw    t0, 0(a0)
+    li    t1, MAGIC
+    bne   t0, t1, 9f
+    lw    t0, 16(a0)
+    li    t1, SPLH
+    bne   t0, t1, 9f
+    li    t3, MTIME
+    lw    t4, 0(t3)
+1:  li    t0, SYSCON
+    lw    t0, 0(t0)
+    andi  t0, t0, 3
+    li    t1, 3
+    beq   t0, t1, 2f
+    lw    t0, 0(t3)
+    sub   t0, t0, t4
+    li    t1, 500000
+    bltu  t0, t1, 1b
+    j     9f                          # PSRAM not calibrated: no splash
+2:  lw    t0, 20(a0)                  # offset
+    lw    a1, 24(a0)                  # length
+    add   a0, a0, t0
+    add   a1, a1, a0                  # end of the list
+    li    a2, FB_UNC
+    li    a3, FB_UNC + FB_BYTES
+3:  bgeu  a0, a1, 8f
+    bgeu  a2, a3, 8f
+    lw    t0, 0(a0)
+    addi  a0, a0, 4
+    srli  t1, t0, 16                  # count
+    slli  t2, t0, 16
+    srli  t2, t2, 16                  # pixel
+    slli  t3, t2, 16
+    or    t3, t3, t2                  # two pixels
+    li    t5, 8
+    li    t6, 2
+4:  beqz  t1, 3b
+    andi  t4, a2, 2
+    beqz  t4, 5f
+    sh    t2, 0(a2)                   # odd pixel first
+    addi  a2, a2, 2
+    addi  t1, t1, -1
+    j     4b
+5:  bltu  t1, t5, 6f                  # 8 pixels per loop
+    sw    t3, 0(a2)
+    sw    t3, 4(a2)
+    sw    t3, 8(a2)
+    sw    t3, 12(a2)
+    addi  a2, a2, 16
+    addi  t1, t1, -8
+    j     5b
+6:  bltu  t1, t6, 7f
+    sw    t3, 0(a2)
+    addi  a2, a2, 4
+    addi  t1, t1, -2
+    j     6b
+7:  beqz  t1, 3b
+    sh    t2, 0(a2)
+    addi  a2, a2, 2
+    j     3b
+8:  li    t0, VID_CTRL
+    li    t1, FB_BASE
+    sw    t1, 4(t0)
+    li    t1, 1
+    sw    t1, 0(t0)
+9:  ret
+
 # copy(a0 = src, a1 = dst, a2 = bytes): word copy, '.' every 64 KB
 copy:
     addi  a2, a2, 3
@@ -507,7 +635,7 @@ cmd_status:
     la    a0, msg_status
     jal   puts
     li    s3, SYSCON
-    addi  s4, s3, 28
+    addi  s4, s3, 44
 1:  lw    a0, 0(s3)
     jal   puthex
     li    a0, ' '

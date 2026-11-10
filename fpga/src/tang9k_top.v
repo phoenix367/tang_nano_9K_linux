@@ -6,6 +6,11 @@
 // TANG9K_CPU_HZ (fpga/build/tang9k_cfg.v, written by fpga/build.sh) must equal clk_out; the
 // UART divider (CPU_HZ / TANG9K_UART_BAUD) and the CLINT's 1 MHz prescaler derive from it.
 //
+// Video (TANG9K_VIDEO, doc/video_plan.md): a second rPLL makes the 126 MHz TMDS clock, a
+// CLKDIV / 5 the 25.2 MHz pixel clock; the SoC's video controller produces the TMDS words and
+// hdmi_phy_gowin serializes them to the HDMI connector. Without video the HDMI pairs are
+// driven low.
+//
 // Reset: button S2 (system reset, see below). LEDs (active low, on = signal true):
 //   0 heartbeat (clk_out running)   1 PLL locked   2 PSRAM calibrated (both channels)
 //   3 UART TX activity              4 SoC in reset  5 poweroff requested (SYSCON)
@@ -22,13 +27,25 @@ module tang9k_top (
     output wire        flash_cs_n,
     output wire        flash_mosi,
     input  wire        flash_miso,
+    // I2C (pins 25/26, open drain, as the ov7670 project) and the microSD slot in SPI mode
+    inout  wire        i2c_scl,
+    inout  wire        i2c_sda,
+    output wire        sd_clk,
+    output wire        sd_mosi,
+    output wire        sd_cs_n,
+    input  wire        sd_miso,
     // on-package PSRAM: placed by the IP, no IO_LOC in the .cst
     output wire [ 1:0] O_psram_ck,
     output wire [ 1:0] O_psram_ck_n,
     inout  wire [ 1:0] IO_psram_rwds,
     output wire [ 1:0] O_psram_reset_n,
     inout  wire [15:0] IO_psram_dq,
-    output wire [ 1:0] O_psram_cs_n
+    output wire [ 1:0] O_psram_cs_n,
+    // HDMI (pins 68-75, shared with the RGB LCD connector: no panel plugged in)
+    output wire        tmds_clk_p,
+    output wire        tmds_clk_n,
+    output wire [ 2:0] tmds_d_p,
+    output wire [ 2:0] tmds_d_n
 );
 
   localparam integer CPU_HZ    = `TANG9K_CPU_HZ;
@@ -119,12 +136,45 @@ module tang9k_top (
     else rst_sync <= {rst_sync[2:0], 1'b1};
   wire rst = !rst_sync[3];
 
+  // ---------------------------------------------------------------- video clocks
+`ifdef TANG9K_VIDEO
+  localparam [0:0] VIDEO = 1'b1;
+  wire hdmi_fclk, hdmi_lock, pclk;
+
+  Gowin_rPLL_video vpll (
+      .clkin (clk_27m),
+      .clkout(hdmi_fclk),
+      .lock  (hdmi_lock)
+  );
+
+  CLKDIV #(.DIV_MODE("5"), .GSREN("false")) hdmi_div (
+      .HCLKIN(hdmi_fclk), .RESETN(hdmi_lock), .CALIB(1'b0), .CLKOUT(pclk));
+
+  // pixel-domain reset: video PLL unlocked or SoC reset (both sides restart together)
+  wire      prst_in_n = hdmi_lock & rst_in_n;
+  reg [3:0] prst_sync;
+  always @(posedge pclk or negedge prst_in_n)
+    if (!prst_in_n) prst_sync <= 4'd0;
+    else prst_sync <= {prst_sync[2:0], 1'b1};
+  wire prst = !prst_sync[3];
+`else
+  localparam [0:0] VIDEO = 1'b0;
+  wire pclk = 1'b0, prst = 1'b1;
+`endif
+  wire [9:0] tmds0, tmds1, tmds2;
+
   // ---------------------------------------------------------------- SoC
   wire poweroff;
+
+  wire i2c_scl_oe, i2c_sda_oe;
+  assign i2c_scl = i2c_scl_oe ? 1'b0 : 1'bz;
+  assign i2c_sda = i2c_sda_oe ? 1'b0 : 1'bz;
 
   soc_top #(
       .CPU_W       (4),
       .CPU_SMODE   (`TANG9K_SMODE),
+      .VIDEO       (VIDEO),
+      .FONT_FILE   (`TANG9K_FONT_FILE),
       .CLK_HZ      (CPU_HZ),
       .UART_BAUD   (UART_BAUD),
       .BOOTROM_FILE(`TANG9K_BOOTROM_FILE)
@@ -134,6 +184,14 @@ module tang9k_top (
       .o_uart_tx       (uart_tx),
       .i_uart_rx       (uart_rx),
       .o_poweroff      (poweroff),
+      .o_i2c_scl_oe    (i2c_scl_oe),
+      .i_i2c_scl       (i2c_scl),
+      .o_i2c_sda_oe    (i2c_sda_oe),
+      .i_i2c_sda       (i2c_sda),
+      .o_sd_sck        (sd_clk),
+      .o_sd_mosi       (sd_mosi),
+      .o_sd_cs_n       (sd_cs_n),
+      .i_sd_miso       (sd_miso),
       .o_flash_sck     (flash_sck),
       .o_flash_cs_n    (flash_cs_n),
       .o_flash_mosi    (flash_mosi),
@@ -154,12 +212,42 @@ module tang9k_top (
       .o_data_mask1    (data_mask1),
       .i_rd_data1      (rd_data1),
       .i_rd_data_valid1(rd_data_valid1),
+      .i_pclk          (pclk),
+      .i_prst          (prst),
+      .o_tmds0         (tmds0),
+      .o_tmds1         (tmds1),
+      .o_tmds2         (tmds2),
+      .o_dbg_vde       (),
+      .o_dbg_vhs       (),
+      .o_dbg_vvs       (),
+      .o_dbg_vpx       (),
       .i_clint_tick    (1'b0),
       .o_dbg_tx_push   (),
       .o_dbg_tx_byte   (),
       .o_dbg_fetch     (),
       .o_dbg_pc        ()
   );
+
+  // ---------------------------------------------------------------- HDMI
+`ifdef TANG9K_VIDEO
+  hdmi_phy_gowin hdmi (
+      .i_pclk (pclk),
+      .i_fclk (hdmi_fclk),
+      .i_rst  (prst),
+      .i_tmds0(tmds0),
+      .i_tmds1(tmds1),
+      .i_tmds2(tmds2),
+      .o_clk_p(tmds_clk_p),
+      .o_clk_n(tmds_clk_n),
+      .o_d_p  (tmds_d_p),
+      .o_d_n  (tmds_d_n)
+  );
+`else
+  ELVDS_OBUF hdmi_c (.I(1'b0), .O(tmds_clk_p), .OB(tmds_clk_n));
+  ELVDS_OBUF hdmi_0 (.I(1'b0), .O(tmds_d_p[0]), .OB(tmds_d_n[0]));
+  ELVDS_OBUF hdmi_1 (.I(1'b0), .O(tmds_d_p[1]), .OB(tmds_d_n[1]));
+  ELVDS_OBUF hdmi_2 (.I(1'b0), .O(tmds_d_p[2]), .OB(tmds_d_n[2]));
+`endif
 
   // ---------------------------------------------------------------- LEDs
   reg [24:0] beat;

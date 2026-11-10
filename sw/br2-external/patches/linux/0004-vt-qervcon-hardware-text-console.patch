@@ -1,0 +1,264 @@
+From: Tang Nano 9K QERV <noreply@localhost>
+Subject: [PATCH] vt: qervcon, the QERV SoC hardware text console
+
+The QERV SoC (Tang Nano 9K, doc/video_plan.md) has an 80x30 hardware text mode: a text
+buffer of {attribute, character} cells drawn with an 8x16 CP437 font, a start-row register
+for scrolling and a cursor register. fbcon drew every glyph through the uncached framebuffer
+(~0.36 s per line on the 42 MHz core); here a character is one 16-bit store.
+---
+diff -Naur a/drivers/video/console/Kconfig b/drivers/video/console/Kconfig
+--- a/drivers/video/console/Kconfig
++++ b/drivers/video/console/Kconfig
+@@ -70,6 +70,16 @@
+ 	  monitor.
+ 	  Select 25 if you use a 640x480 resolution by default.
+ 
++config QERV_CONSOLE
++	bool "QERV SoC (Tang Nano 9K) hardware text console"
++	depends on VT && OF && HAS_IOMEM
++	help
++	  The 80x30 hardware text mode of the QERV SoC's HDMI video controller
++	  (Tang Nano 9K): one store per character, scrolling by a start-row
++	  register. It takes over all virtual consoles when it probes.
++
++	  If unsure, say N.
++
+ config FRAMEBUFFER_CONSOLE
+ 	bool "Framebuffer Console support"
+ 	depends on FB_CORE && !UML
+diff -Naur a/drivers/video/console/Makefile b/drivers/video/console/Makefile
+--- a/drivers/video/console/Makefile
++++ b/drivers/video/console/Makefile
+@@ -8,3 +8,4 @@
+ obj-$(CONFIG_STI_CONSOLE)         += sticon.o
+ obj-$(CONFIG_VGA_CONSOLE)         += vgacon.o
+ obj-$(CONFIG_MDA_CONSOLE)         += mdacon.o
++obj-$(CONFIG_QERV_CONSOLE)        += qervcon.o
+diff -Naur a/drivers/video/console/qervcon.c b/drivers/video/console/qervcon.c
+--- a/drivers/video/console/qervcon.c
++++ b/drivers/video/console/qervcon.c
+@@ -0,0 +1,224 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * QERV SoC (Tang Nano 9K) text console.
++ *
++ * The SoC's video controller has a hardware text mode: 80 x 30 cells of {attribute, character}
++ * in a write-only text buffer, drawn with a CP437 8x16 font and the VGA palette, a start-row
++ * register that scrolls the whole screen and a cursor register for a blinking underline. A
++ * character is one store instead of a glyph drawn into a pixel framebuffer, so the console
++ * is as fast as the VT layer.
++ *
++ * The screen stays on the boot ROM's splash (the framebuffer) until the console first shows
++ * something other than blanks; then it switches to text mode. While a program has the VT in
++ * graphics mode the framebuffer (/dev/fb0, qervfb) is shown instead.
++ *
++ * DT: compatible = "qerv,tang9k-text"; reg = <text buffer>, <video registers CTRL..CURSOR>.
++ */
++#include <linux/console.h>
++#include <linux/io.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/vt_buffer.h>
++#include <linux/vt_kern.h>
++
++#define QERV_COLS	80
++#define QERV_ROWS	30
++
++/* video registers, from CTRL (SYSCON word 8) */
++#define REG_CTRL	0x00	/* bit 0 framebuffer, bit 1 test pattern, bit 2 text mode */
++#define REG_TSTART	0x10	/* first text-buffer row on screen */
++#define REG_CURSOR	0x14	/* bit 12 enable, 11:7 row, 6:0 column */
++#define CTRL_FB		0x1
++#define CTRL_TEXT	0x4
++
++static void __iomem *qerv_text;
++static void __iomem *qerv_regs;
++static unsigned int qerv_tstart;	/* text-buffer row shown at the top */
++static bool qerv_text_on;		/* something has been shown: text mode */
++static bool qerv_graphics;		/* the VT is in graphics mode */
++
++static void qerv_show(void)
++{
++	writel((qerv_text_on && !qerv_graphics) ? CTRL_FB | CTRL_TEXT : CTRL_FB,
++	       qerv_regs + REG_CTRL);
++}
++
++static void __iomem *qerv_cell(unsigned int y, unsigned int x)
++{
++	return qerv_text + (((y + qerv_tstart) % QERV_ROWS) * QERV_COLS + x) * 2;
++}
++
++static void qerv_put(u16 ca, unsigned int y, unsigned int x)
++{
++	writew(ca, qerv_cell(y, x));
++	if (!qerv_text_on && (ca & 0xff) != ' ' && (ca & 0xff) != 0) {
++		qerv_text_on = true;
++		qerv_show();
++	}
++}
++
++static const char *qervcon_startup(void)
++{
++	return "QERV text";
++}
++
++static void qervcon_init(struct vc_data *vc, bool init)
++{
++	vc->vc_can_do_color = 1;
++	vc->vc_complement_mask = 0x7700;
++	vc->vc_hi_font_mask = 0;
++	if (init) {
++		vc->vc_cols = QERV_COLS;
++		vc->vc_rows = QERV_ROWS;
++	} else {
++		vc_resize(vc, QERV_COLS, QERV_ROWS);
++	}
++}
++
++static void qervcon_deinit(struct vc_data *vc)
++{
++}
++
++static void qervcon_clear(struct vc_data *vc, unsigned int y, unsigned int x,
++			  unsigned int count)
++{
++	while (count--)
++		writew(vc->vc_video_erase_char, qerv_cell(y, x++));
++}
++
++static void qervcon_putc(struct vc_data *vc, u16 ca, unsigned int y, unsigned int x)
++{
++	qerv_put(ca, y, x);
++}
++
++static void qervcon_putcs(struct vc_data *vc, const u16 *s, unsigned int count,
++			  unsigned int y, unsigned int x)
++{
++	while (count--)
++		qerv_put(scr_readw(s++), y, x++);
++}
++
++static void qervcon_cursor(struct vc_data *vc, bool enable)
++{
++	if (enable && CUR_SIZE(vc->vc_cursor_type) != CUR_NONE)
++		writel(BIT(12) | (vc->state.y << 7) | vc->state.x, qerv_regs + REG_CURSOR);
++	else
++		writel(0, qerv_regs + REG_CURSOR);
++}
++
++/*
++ * Whole screen: move the start row, clear the rows that come in. A partial region: rewrite it
++ * from the VT's screen buffer as it will be after the scroll. Returns false: the VT then moves
++ * its own buffer.
++ */
++static bool qervcon_scroll(struct vc_data *vc, unsigned int t, unsigned int b,
++			   enum con_scroll dir, unsigned int lines)
++{
++	unsigned int r, x;
++
++	if (t == 0 && b == vc->vc_rows && lines < QERV_ROWS) {
++		if (dir == SM_UP)
++			qerv_tstart = (qerv_tstart + lines) % QERV_ROWS;
++		else
++			qerv_tstart = (qerv_tstart + QERV_ROWS - lines) % QERV_ROWS;
++		writel(qerv_tstart, qerv_regs + REG_TSTART);
++		for (r = 0; r < lines; r++)
++			qervcon_clear(vc, dir == SM_UP ? b - lines + r : r, 0, vc->vc_cols);
++		return false;
++	}
++	for (r = t; r < b; r++) {
++		int src = dir == SM_UP ? (int)(r + lines) : (int)r - (int)lines;
++
++		if (src < (int)t || src >= (int)b) {
++			qervcon_clear(vc, r, 0, vc->vc_cols);
++			continue;
++		}
++		for (x = 0; x < vc->vc_cols; x++)
++			writew(scr_readw((u16 *)(vc->vc_origin + src * vc->vc_size_row) + x),
++			       qerv_cell(r, x));
++	}
++	return false;
++}
++
++static bool qervcon_switch(struct vc_data *vc)
++{
++	return true;	/* redraw */
++}
++
++static bool qervcon_blank(struct vc_data *vc, enum vesa_blank_mode blank, bool mode_switch)
++{
++	if (blank == VESA_NO_BLANKING) {
++		qerv_graphics = false;
++		qerv_show();
++		return true;	/* redraw */
++	}
++	if (mode_switch) {
++		qerv_graphics = true;
++		qerv_show();
++	}
++	return false;
++}
++
++static int qervcon_resize(struct vc_data *vc, unsigned int width, unsigned int height,
++			  bool from_user)
++{
++	return (width == QERV_COLS && height == QERV_ROWS) ? 0 : -EINVAL;
++}
++
++static const struct consw qerv_con = {
++	.owner		= THIS_MODULE,
++	.con_startup	= qervcon_startup,
++	.con_init	= qervcon_init,
++	.con_deinit	= qervcon_deinit,
++	.con_clear	= qervcon_clear,
++	.con_putc	= qervcon_putc,
++	.con_putcs	= qervcon_putcs,
++	.con_cursor	= qervcon_cursor,
++	.con_scroll	= qervcon_scroll,
++	.con_switch	= qervcon_switch,
++	.con_blank	= qervcon_blank,
++	.con_resize	= qervcon_resize,
++};
++
++static int qervcon_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct resource *text, *regs;
++	int err;
++
++	text = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	regs = platform_get_resource(pdev, IORESOURCE_MEM, 1);
++	if (!text || !regs)
++		return dev_err_probe(dev, -EINVAL, "text buffer and video registers required\n");
++	/* the registers sit in the SYSCON block, which syscon maps too: no request */
++	qerv_text = devm_ioremap(dev, text->start, resource_size(text));
++	qerv_regs = devm_ioremap(dev, regs->start, resource_size(regs));
++	if (!qerv_text || !qerv_regs)
++		return -ENOMEM;
++	writel(0, qerv_regs + REG_TSTART);
++	writel(0, qerv_regs + REG_CURSOR);
++	console_lock();
++	err = do_take_over_console(&qerv_con, 0, MAX_NR_CONSOLES - 1, 1);
++	console_unlock();
++	return err;
++}
++
++static const struct of_device_id qervcon_of_match[] = {
++	{ .compatible = "qerv,tang9k-text" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, qervcon_of_match);
++
++static struct platform_driver qervcon_driver = {
++	.driver = {
++		.name = "qervcon",
++		.of_match_table = qervcon_of_match,
++		.suppress_bind_attrs = true,
++	},
++	.probe = qervcon_probe,
++};
++module_platform_driver(qervcon_driver);
++
++MODULE_DESCRIPTION("QERV SoC (Tang Nano 9K) hardware text console");
++MODULE_LICENSE("GPL");

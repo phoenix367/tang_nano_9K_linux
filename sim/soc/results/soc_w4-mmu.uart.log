@@ -1,12 +1,14 @@
 
 QERV boot ROM
 > boot S
-[    0.000000] Linux version 6.18.7 (ivan@ivan-G5-5587) (riscv32-buildroot-linux-uclibc-gcc.br_real (Buildroot 2026.08.1) 15.3.0, GNU ld (GNU Binutils) 2.45.1) #2 Tue Nov 10 15:58:55 +04 2026
+[    0.000000] Linux version 6.18.7 (ivan@ivan-G5-5587) (riscv32-buildroot-linux-uclibc-gcc.br_real (Buildroot 2026.08.1) 15.3.0, GNU ld (GNU Binutils) 2.45.1) #2 Wed Nov 11 00:35:11 +04 2026
+[    0.000000] random: crng init done
 [    0.000000] Machine model: Tang Nano 9K QERV (MMU)
 [    0.000000] SBI specification v0.1 detected
 [    0.000000] earlycon: uart8250 at MMIO 0x10000000 (options '1000000')
 [    0.000000] printk: legacy bootconsole [uart8250] enabled
 [    0.000000] OF: reserved mem: 0x807fe000..0x807fefff (4 KiB) map non-reusable sbi@807fe000
+[    0.000000] OF: reserved mem: 0x80700000..0x80795fff (600 KiB) map non-reusable framebuffer@80700000
 [    0.000000] Zone ranges:
 [    0.000000]   Normal   [mem 0x0000000080000000-0x00000000807fffff]
 [    0.000000] Movable zone start for each node
@@ -26,28 +28,57 @@ QERV boot ROM
 [    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
 [    0.000000] riscv-intc: 32 local interrupts mapped
 [    0.000000] clocksource: riscv_clocksource: mask: 0xffffffffffffffff max_cycles: 0x1d854df40, max_idle_ns: 3526361616960 ns
-[    0.000465] sched_clock: 64 bits at 1000kHz, resolution 1000ns, wraps every 2199023255500ns
-[    0.033950] Calibrating delay loop (skipped), value calculated using timer frequency.. 2.00 BogoMIPS (lpj=10000)
-[    0.057503] pid_max: default: 4096 minimum: 301
-[    0.093427] Mount-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
-[    0.113326] Mountpoint-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
-[    0.700319] ASID allocator disabled (0 bits)
-[    0.854649] Memory: 5084K/8192K available (1743K kernel code, 98K rwdata, 170K rodata, 660K init, 51K bss, 2860K reserved, 0K cma-reserved)
-[    1.028219] devtmpfs: initialized
-[    1.655900] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604462750000 ns
-[    1.688108] posixtimers hash table entries: 512 (order: 0, 2048 bytes, linear)
-[    1.713703] futex hash table entries: 16 (256 bytes on 1 NUMA nodes, total 0 KiB, linear).
-[    2.695126] clocksource: Switched to clocksource riscv_clocksource
-[    4.233157] workingset: timestamp_bits=30 max_order=11 bucket_order=0
-[    5.092639] Serial: 8250/16550 driver, 1 ports, IRQ sharing disabled
-[    5.862616] of_serial 10000000.serial: error -ENXIO: IRQ index 0 not found
-[    6.189247] printk: legacy console [ttyS0] disabled
-[    6.870120] 10000000.serial: ttyS0 at MMIO 0x10000000 (irq = 0, base_baud = 1000000) is a 16550A
-[    6.913330] printk: legacy console [ttyS0] enabled
-[    6.913330] printk: legacy console [ttyS0] enabled
-[    6.952281] printk: legacy bootconsole [uart8250] disabled
-[    6.952281] printk: legacy bootconsole [uart8250] disabled
-[   10.483040] clk: Disabling unused clocks
-[   24.022609] Freeing unused kernel image (initmem) memory: 660K
-[   24.043366] Kernel memory protection not selected by kernel config.
-[   24.069547] Run /init as init process
+[    0.000448] sched_clock: 64 bits at 1000kHz, resolution 1000ns, wraps every 2199023255500ns
+[    0.087442] Console: colour dummy device 80x30
+[    0.107873] Calibrating delay loop (skipped), value calculated using timer frequency.. 2.00 BogoMIPS (lpj=10000)
+[    0.129182] pid_max: default: 4096 minimum: 301
+[    0.159828] Mount-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.179622] Mountpoint-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.686655] ASID allocator disabled (0 bits)
+[    0.810884] Memory: 3832K/8192K available (2255K kernel code, 120K rwdata, 239K rodata, 688K init, 54K bss, 4096K reserved, 0K cma-reserved)
+[    0.943910] devtmpfs: initialized
+[    1.662230] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604462750000 ns
+[    1.689730] posixtimers hash table entries: 512 (order: 0, 2048 bytes, linear)
+[    1.709069] futex hash table entries: 16 (256 bytes on 1 NUMA nodes, total 0 KiB, linear).
+[    3.614126] clocksource: Switched to clocksource riscv_clocksource
+[    5.936773] workingset: timestamp_bits=30 max_order=10 bucket_order=0
+[    6.355101] riscv-plic: interrupt-controller@12000000: mapped 2 interrupts with 1 handlers for 1 contexts.
+[    6.906755] Console: switching to colour QERV text 80x30
+[    7.639852] fb0: 640x480 RGB565 at 0x90700000, Y-wrap panning
+[    8.266899] Serial: 8250/16550 driver, 1 ports, IRQ sharing disabled
+[    9.167703] printk: legacy console [ttyS0] disabled
+[    9.714389] 10000000.serial: ttyS0 at MMIO 0x10000000 (irq = 1, base_baud = 1000000) is a 16550A
+[    9.749577] printk: legacy console [ttyS0] enabled
+[    9.749577] printk: legacy console [ttyS0] enabled
+[    9.780298] printk: legacy bootconsole [uart8250] disabled
+[    9.780298] printk: legacy bootconsole [uart8250] disabled
+[   11.066926] i2c_dev: i2c /dev entries driver
+[   12.735791] mmc_spi spi0.0: SD/MMC host mmc0, no WP, no poweroff, cd polling
+[   16.209709] clk: Disabling unused clocks
+[   23.166349] Freeing unused kernel image (initmem) memory: 688K
+[   23.179963] Kernel memory protection not selected by kernel config.
+[   23.197685] Run /init as init process
+~ # i2cdetect -y 0
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00:          -- -- -- -- -- -- -- -- -- -- -- -- -- 
+10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+50: 50 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+70: -- -- -- -- -- -- -- --                         
+~ # i2cget -y 0 0x50 0x10
+0x4a
+~ # i2cset -y 0 0x50 0x10 0xa5
+~ # i2cget -y 0 0x50 0x10
+0xa5
+~ # i2cdump -y -r 0x0c-0x13 0 0x50 b
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f    0123456789abcdef
+00:                                     56 57 54 55                VWTU
+10: a5 4b 48 49                                        ?KHI            
+~ # dmesg | grep -i -E "mmc|spi|i2c|ocores"
+[    0.000000] Ticket spinlock: enabled
+[   11.066926] i2c_dev: i2c /dev entries driver
+[   12.735791] mmc_spi spi0.0: SD/MMC host mmc0, no WP, no poweroff, cd polling
+~ # 

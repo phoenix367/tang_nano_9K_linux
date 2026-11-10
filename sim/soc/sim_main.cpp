@@ -96,7 +96,61 @@ int main(int argc, char **argv) {
   static Rec ring[RING];
   size_t ring_n = 0;
 
-  const uint64_t clk_hz = 27000000, baud = 1000000, cpb = clk_hz / baud;
+  // +clk_hz: the SoC clock the RTL was built for (CLK_HZ: UART divider, CLINT prescaler)
+  uint64_t clk_hz = 27000000;
+  if (const char *a = plusarg("clk_hz=")) clk_hz = strtoull(a, nullptr, 0);
+  const uint64_t baud = 1000000, cpb = clk_hz / baud;
+
+  // +video: run the 25.2 MHz pixel clock between the SoC clock's edges (times in ps);
+  // +frame_dump=<prefix>: write every +frame_every (60) th frame as <prefix><n>.ppm
+  const bool video = plusarg("video") != nullptr;
+  const char *frame_dump = plusarg("frame_dump=");
+  uint64_t frame_every = 60;
+  if (const char *a = plusarg("frame_every=")) frame_every = strtoull(a, nullptr, 0);
+  const double t_sys = 1e12 / clk_hz, t_pix_half = 1e12 / 25.2e6 / 2;
+  double t_pix_next = t_pix_half;
+  std::vector<uint16_t> fb(640 * 480);
+  int fx = 0, fy = 0;
+  uint64_t frames = 0;
+  bool v_vs = true, v_de = false;
+  auto pixel = [&]() {
+    if (!top->vvs && v_vs) {                      // vsync starts: the frame is complete
+      if (frame_dump && frames % frame_every == 0 && fy == 480) {
+        char name[512];
+        snprintf(name, sizeof name, "%s%04llu.ppm", frame_dump, (unsigned long long)frames);
+        if (FILE *f = fopen(name, "wb")) {
+          fprintf(f, "P6\n640 480\n255\n");
+          for (uint16_t p : fb) {
+            uint8_t rgb[3] = {(uint8_t)((p >> 11) << 3 | (p >> 13)),
+                              (uint8_t)(((p >> 5) & 63) << 2 | ((p >> 9) & 3)),
+                              (uint8_t)((p & 31) << 3 | ((p >> 2) & 7))};
+            fwrite(rgb, 1, 3, f);
+          }
+          fclose(f);
+        }
+      }
+      frames++;
+      fy = 0;
+    }
+    if (top->vde) {
+      if (fx < 640 && fy < 480) fb[fy * 640 + fx] = top->vpx;
+      fx++;
+    } else if (v_de) {
+      fx = 0;
+      fy++;
+    }
+    v_vs = top->vvs;
+    v_de = top->vde;
+  };
+  // advance the pixel clock up to time t (ps)
+  auto pix_to = [&](double t) {
+    while (video && t_pix_next <= t) {
+      top->pclk = !top->pclk;
+      top->eval();
+      if (top->pclk && !top->prst) pixel();
+      t_pix_next += t_pix_half;
+    }
+  };
 
   std::string tail;
   uint64_t milestone_cycle[5] = {0}, milestone_fetch[5] = {0};
@@ -128,7 +182,9 @@ int main(int argc, char **argv) {
 
   const char *end_reason = "max_cycles";
   for (; cycle < max_cycles; cycle++) {
+    pix_to(cycle * t_sys);
     top->rst = cycle < 16;
+    top->prst = cycle < 16;
     top->clk = 0;
     top->eval();
 
@@ -236,12 +292,16 @@ int main(int argc, char **argv) {
       rx_bit = rx_bit == 9 ? -1 : rx_bit + 1;
     }
 
+    pix_to(cycle * t_sys + t_sys / 2);
     top->clk = 1;
     top->eval();
   }
 
-  fprintf(stderr, "\n== end: %s after %llu cycles (%.3f s at 27 MHz), %llu fetches\n", end_reason,
-          (unsigned long long)cycle, cycle / (double)clk_hz, (unsigned long long)fetches);
+  fprintf(stderr, "\n== end: %s after %llu cycles (%.3f s at %.0f MHz), %llu fetches\n", end_reason,
+          (unsigned long long)cycle, cycle / (double)clk_hz, clk_hz / 1e6, (unsigned long long)fetches);
+  if (video)
+    fprintf(stderr, "   video: %llu frames, STATUS %08x\n", (unsigned long long)frames,
+            (unsigned)top->vstat);
   for (int i = 0; milestones[i]; i++)
     if (milestone_cycle[i])
       fprintf(stderr, "   %-22s cycle %12llu  fetch %10llu  (%.3f s)\n", milestones[i],

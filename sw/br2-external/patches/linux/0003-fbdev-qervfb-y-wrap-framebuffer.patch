@@ -1,0 +1,178 @@
+From: Tang Nano 9K QERV <noreply@localhost>
+Subject: [PATCH] fbdev: qervfb, the QERV SoC framebuffer with Y-wrap panning
+
+The QERV SoC (Tang Nano 9K, doc/video_plan.md) scans a 640x480 RGB565 framebuffer out over
+HDMI; its YOFF register pans with wrap-around. simplefb cannot pan, so fbcon redrew all 2400
+characters through the uncached framebuffer for every scrolled line (~1 s on the 42 MHz
+core). With Y-wrap panning fbcon scrolls by moving YOFF and draws only the new line.
+---
+diff -Naur a/drivers/video/fbdev/Kconfig b/drivers/video/fbdev/Kconfig
+--- a/drivers/video/fbdev/Kconfig
++++ b/drivers/video/fbdev/Kconfig
+@@ -1781,6 +1781,15 @@
+ 	  This driver is deprecated, please use the Hyper-V DRM driver at
+ 	  drivers/gpu/drm/hyperv (CONFIG_DRM_HYPERV) instead.
+ 
++config FB_QERV
++	bool "QERV SoC (Tang Nano 9K) framebuffer"
++	depends on FB=y && OF
++	select FB_IOMEM_HELPERS
++	help
++	  The QERV SoC's HDMI framebuffer (640x480 RGB565, set up by its boot ROM), with Y-wrap
++	  panning through the video controller's YOFF register, so the framebuffer console
++	  scrolls by panning.
++
+ config FB_SIMPLE
+ 	tristate "Simple framebuffer support"
+ 	depends on FB
+diff -Naur a/drivers/video/fbdev/Makefile b/drivers/video/fbdev/Makefile
+--- a/drivers/video/fbdev/Makefile
++++ b/drivers/video/fbdev/Makefile
+@@ -123,6 +123,7 @@
+ obj-$(CONFIG_FB_OF)               += offb.o
+ obj-$(CONFIG_FB_SSD1307)	  += ssd1307fb.o
+ obj-$(CONFIG_FB_SIMPLE)           += simplefb.o
++obj-$(CONFIG_FB_QERV)             += qervfb.o
+ 
+ # the test framebuffer is last
+ obj-$(CONFIG_FB_VIRTUAL)          += vfb.o
+diff -Naur a/drivers/video/fbdev/qervfb.c b/drivers/video/fbdev/qervfb.c
+--- a/drivers/video/fbdev/qervfb.c
++++ b/drivers/video/fbdev/qervfb.c
+@@ -0,0 +1,136 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * QERV SoC (Tang Nano 9K) framebuffer.
++ *
++ * The boot ROM sets up a 640x480 RGB565 framebuffer that the SoC's video controller scans out
++ * over HDMI. Its YOFF register pans with wrap-around: screen line n shows framebuffer line
++ * (n + YOFF) mod height. With that, fbcon scrolls by moving YOFF and draws only the new
++ * line, instead of redrawing every character through the uncached framebuffer.
++ *
++ * DT: compatible = "qerv,tang9k-fb"; reg = <framebuffer>, <YOFF register>; width, height
++ * and stride (bytes per line) as for simple-framebuffer. The format is RGB565.
++ */
++#include <linux/errno.h>
++#include <linux/fb.h>
++#include <linux/io.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++
++struct qervfb_par {
++	void __iomem *yoff;
++	u32 palette[16];
++};
++
++static int qervfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
++			    u_int transp, struct fb_info *info)
++{
++	u32 *pal = info->pseudo_palette;
++
++	if (regno >= 16)
++		return -EINVAL;
++	pal[regno] = ((red >> 11) << 11) | ((green >> 10) << 5) | (blue >> 11);
++	return 0;
++}
++
++static int qervfb_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
++{
++	struct qervfb_par *par = info->par;
++
++	if (var->xoffset || var->yoffset >= info->var.yres_virtual)
++		return -EINVAL;
++	writel(var->yoffset, par->yoff);
++	return 0;
++}
++
++static const struct fb_ops qervfb_ops = {
++	.owner		= THIS_MODULE,
++	FB_DEFAULT_IOMEM_OPS,
++	.fb_setcolreg	= qervfb_setcolreg,
++	.fb_pan_display	= qervfb_pan_display,
++};
++
++static int qervfb_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct resource *mem, *reg;
++	struct qervfb_par *par;
++	struct fb_info *info;
++	u32 width, height, stride;
++	int ret;
++
++	if (of_property_read_u32(dev->of_node, "width", &width) ||
++	    of_property_read_u32(dev->of_node, "height", &height) ||
++	    of_property_read_u32(dev->of_node, "stride", &stride))
++		return dev_err_probe(dev, -EINVAL, "width, height and stride are required\n");
++	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	reg = platform_get_resource(pdev, IORESOURCE_MEM, 1);
++	if (!mem || !reg)
++		return dev_err_probe(dev, -EINVAL, "framebuffer and YOFF register required\n");
++
++	info = framebuffer_alloc(sizeof(*par), dev);
++	if (!info)
++		return -ENOMEM;
++	par = info->par;
++
++	/* the YOFF register sits in the SYSCON block, which syscon maps too: no request */
++	par->yoff = devm_ioremap(dev, reg->start, resource_size(reg));
++	info->screen_base = devm_ioremap(dev, mem->start, resource_size(mem));
++	if (!par->yoff || !info->screen_base) {
++		ret = -ENOMEM;
++		goto err;
++	}
++
++	strscpy(info->fix.id, "qervfb", sizeof(info->fix.id));
++	info->fix.smem_start = mem->start;
++	info->fix.smem_len = resource_size(mem);
++	info->fix.type = FB_TYPE_PACKED_PIXELS;
++	info->fix.visual = FB_VISUAL_TRUECOLOR;
++	info->fix.line_length = stride;
++	info->fix.ywrapstep = 1;
++	info->fix.accel = FB_ACCEL_NONE;
++
++	info->var.xres = info->var.xres_virtual = width;
++	info->var.yres = info->var.yres_virtual = height;
++	info->var.bits_per_pixel = 16;
++	info->var.red = (struct fb_bitfield){ .offset = 11, .length = 5 };
++	info->var.green = (struct fb_bitfield){ .offset = 5, .length = 6 };
++	info->var.blue = (struct fb_bitfield){ .offset = 0, .length = 5 };
++	info->var.activate = FB_ACTIVATE_NOW;
++	info->var.vmode = FB_VMODE_NONINTERLACED;
++	info->var.height = -1;
++	info->var.width = -1;
++
++	info->fbops = &qervfb_ops;
++	/* Y-wrap panning; "reads fast" makes fbcon scroll by panning instead of redrawing (it
++	   reads the framebuffer only to move partial scroll regions) */
++	info->flags = FBINFO_HWACCEL_YWRAP | FBINFO_READS_FAST;
++	info->pseudo_palette = par->palette;
++
++	ret = devm_register_framebuffer(dev, info);
++	if (ret)
++		goto err;
++	fb_info(info, "%ux%u RGB565 at %pa, Y-wrap panning\n", width, height, &mem->start);
++	return 0;
++err:
++	framebuffer_release(info);
++	return dev_err_probe(dev, ret, "registration failed\n");
++}
++
++static const struct of_device_id qervfb_of_match[] = {
++	{ .compatible = "qerv,tang9k-fb" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, qervfb_of_match);
++
++static struct platform_driver qervfb_driver = {
++	.driver = {
++		.name = "qervfb",
++		.of_match_table = qervfb_of_match,
++	},
++	.probe = qervfb_probe,
++};
++module_platform_driver(qervfb_driver);
++
++MODULE_DESCRIPTION("QERV SoC (Tang Nano 9K) framebuffer with Y-wrap panning");
++MODULE_LICENSE("GPL");

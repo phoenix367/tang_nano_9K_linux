@@ -26,11 +26,17 @@ case "${CONFIG:-nommu}" in
   mmu)   SMODE=1 TAG="w$W-mmu" IMG="$WORK/images-tang9k-mmu" DTB=tang9k-mmu.dtb BOOT=B ;;
   *)     echo "CONFIG must be nommu or mmu" >&2; exit 1 ;;
 esac
+# VIDEO=1: the video controller, at the board's clocks (CPU 42 MHz, pixel 25.2 MHz);
+# FRAME_DUMP=1 writes every 60th frame as $WORK/frames-<tag>/f<n>.ppm
+VIDEO="${VIDEO:-0}"
+CLK_HZ=27000000
+if [[ "$VIDEO" == 1 ]]; then TAG="$TAG-video"; CLK_HZ=42000000; fi
 OBJ="$WORK/verilator-soc-$TAG"
 
 "$REPO/sw/bootrom/build.sh" "$OBJ/bootrom.hex" > /dev/null
 
-SRCS=("$HERE/tb_soc.v" "$REPO"/rtl/soc/*.v "$REPO"/rtl/qerv/*.v "$REPO/rtl/sim/psram_ui_model.v" "$REPO/rtl/sim/spi_flash_model.v"
+SRCS=("$HERE/tb_soc.v" "$REPO"/rtl/soc/*.v "$REPO"/rtl/i2c/*.v "$REPO"/rtl/qerv/*.v "$REPO/rtl/sim/psram_ui_model.v" "$REPO/rtl/sim/spi_flash_model.v" "$REPO/rtl/sim/i2c_eeprom_model.v"
+      "$REPO/rtl/video/video_ctrl.v" "$REPO/rtl/video/video_dma.v" "$REPO/rtl/video/video_out.v" "$REPO/rtl/video/tmds_encoder.v"
       "$REPO/external/mdu/rtl/mdu_top.v" "$REPO/external/serv/servile/servile_arbiter.v")
 for f in "$REPO"/external/serv/rtl/*.v; do
   case "$f" in *serv_synth_wrapper.v|*serv_debug.v) ;; *) SRCS+=("$f") ;; esac
@@ -38,7 +44,7 @@ done
 
 verilator --cc --exe --build -j "$(nproc)" -O3 --x-assign fast --x-initial fast \
     -Wno-fatal -Wno-lint -Wno-style --top-module tb_soc -Mdir "$OBJ" \
-    -GCPU_W="$W" -GCPU_SMODE="$SMODE" -GBOOTROM_FILE="\"$OBJ/bootrom.hex\"" \
+    -GCPU_W="$W" -GCPU_SMODE="$SMODE" -GVIDEO="$VIDEO" -GCLK_HZ="$CLK_HZ" -GFONT_FILE="\"$REPO/rtl/video/font8x16.hex\"" -GBOOTROM_FILE="\"$OBJ/bootrom.hex\"" \
     "${SRCS[@]}" "$HERE/sim_main.cpp" -o Vtb_soc > "$OBJ.build.log" 2>&1 \
   || { tail -30 "$OBJ.build.log"; exit 1; }
 
@@ -54,7 +60,11 @@ if [[ -z "${ROM_INPUT:-}" ]]; then
   python3 -c 'import sys,struct; c=sys.argv[2].encode(); open(sys.argv[1],"wb").write(struct.pack("<I",len(c))+c)' \
       "$ROM_INPUT" "$([[ -n "${FLASH:-}" ]] && echo f || echo $BOOT)"
 fi
-args+=(+rom_input="$ROM_INPUT" +uart_log="${UART_LOG:-$HERE/results/soc_$TAG.uart.log}")
+args+=(+rom_input="$ROM_INPUT" +uart_log="${UART_LOG:-$HERE/results/soc_$TAG.uart.log}" +clk_hz="$CLK_HZ")
+if [[ "$VIDEO" == 1 ]]; then
+  args+=(+video)
+  [[ -n "${FRAME_DUMP:-}" ]] && { mkdir -p "$WORK/frames-$TAG"; args+=(+frame_dump="$WORK/frames-$TAG/f"); }
+fi
 [[ -n "${INPUT:-}" ]] && args+=(+input="$INPUT")
 [[ -n "${MAX_CYCLES:-}" ]] && args+=(+max_cycles="$MAX_CYCLES")
 [[ -n "${FETCH_TRACE:-}" ]] && args+=(+fetch_trace="$HERE/results/soc_$TAG.fetch")

@@ -27,17 +27,29 @@
         <File path="../rtl/qerv/amo_unit.v" type="file.verilog" enable="1"/>
         <File path="../rtl/qerv/sv32_mmu.v" type="file.verilog" enable="1"/>
         <File path="../rtl/qerv/qerv_cpu.v" type="file.verilog" enable="1"/>
+        <File path="../rtl/i2c/i2c_master_bit_ctrl.v" type="file.verilog" enable="1"/>
+        <File path="../rtl/i2c/i2c_master_byte_ctrl.v" type="file.verilog" enable="1"/>
+        <File path="../rtl/i2c/i2c_master_top.v" type="file.verilog" enable="1"/>
         <File path="../rtl/soc/bootrom.v" type="file.verilog" enable="1"/>
         <File path="../rtl/soc/clint.v" type="file.verilog" enable="1"/>
         <File path="../rtl/soc/l1_cache.v" type="file.verilog" enable="1"/>
+        <File path="../rtl/soc/plic.v" type="file.verilog" enable="1"/>
+        <File path="../rtl/soc/psram_arb.v" type="file.verilog" enable="1"/>
         <File path="../rtl/soc/soc_top.v" type="file.verilog" enable="1"/>
         <File path="../rtl/soc/spi_flash_xip.v" type="file.verilog" enable="1"/>
+        <File path="../rtl/soc/spi_master.v" type="file.verilog" enable="1"/>
         <File path="../rtl/soc/syscon.v" type="file.verilog" enable="1"/>
         <File path="../rtl/soc/uart_16550.v" type="file.verilog" enable="1"/>
+        <File path="../rtl/video/tmds_encoder.v" type="file.verilog" enable="1"/>
+        <File path="../rtl/video/video_out.v" type="file.verilog" enable="1"/>
+        <File path="../rtl/video/video_dma.v" type="file.verilog" enable="1"/>
+        <File path="../rtl/video/video_ctrl.v" type="file.verilog" enable="1"/>
+        <File path="../rtl/video/hdmi_phy_gowin.v" type="file.verilog" enable="1"/>
         <File path="src/gowin_rpll/gowin_rpll.v" type="file.verilog" enable="1"/>
+        <File path="src/gowin_rpll/gowin_rpll_video.v" type="file.verilog" enable="1"/>
         <File path="src/psram_memory_interface_hs_2ch/psram_memory_interface_hs_2ch.v" type="file.verilog" enable="1"/>
         <File path="src/tang9k_top.v" type="file.verilog" enable="1"/>
         <File path="src/tang9k_soc.cst" type="file.cst" enable="1"/>
-        <File path="src/tang9k_soc.sdc" type="file.sdc" enable="1"/>
+        <File path="build/tang9k_soc.sdc" type="file.sdc" enable="1"/>
     </FileList>
 </Project>

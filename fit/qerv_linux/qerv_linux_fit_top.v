@@ -35,6 +35,7 @@ module qerv_linux_fit_top (
       .i_rst      (rst),
       .i_timer_irq(lfsr[40] & lfsr[47] & lfsr[54]),
       .i_mtime    (lfsr),
+      .i_seip     (lfsr[30] & lfsr[33]),
       .o_ibus_adr (ibus_adr),
       .o_ibus_cyc (ibus_cyc),
       .i_ibus_rdt (lfsr[31:0]),

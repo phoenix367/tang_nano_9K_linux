@@ -8,7 +8,10 @@
 //   AMO*  : read old value, compute op(old, rs2) into a register, write it; return old.
 //   LR.W  : read; set the reservation (word address); return the value.
 //   SC.W  : if the reservation is valid for this word, write rs2 and return 0, else return 1
-//           without a memory access. Every SC clears the reservation.
+//           without a memory access. Every SC clears the reservation. The address compare
+//           is registered (S_SCCHK, one cycle): combinational, its 30-bit carry chain sat
+//           between the MMU's translated address and the core's ack, the SoC's worst path
+//           once the I2C and SD controllers were in (doc/peripherals.md).
 //
 // Single hart and no other bus masters in stage 1, so holding the bus between the read and
 // the write is enough for atomicity. Linux clears stale reservations itself with a dummy SC
@@ -44,17 +47,17 @@ module amo_unit (
                    OP_MAX = 5'b10100, OP_MINU = 5'b11000, OP_MAXU = 5'b11100;
 
   localparam [2:0] S_IDLE = 3'd0, S_READ = 3'd1, S_GAP = 3'd2, S_WRITE = 3'd3,
-                   S_SCFAIL = 3'd4, S_DONE = 3'd5;
+                   S_SCFAIL = 3'd4, S_DONE = 3'd5, S_SCCHK = 3'd6;
 
   reg [ 2:0] state;
   reg [31:0] old;
   reg [31:0] wdat;   // op(old, rs2), registered in S_GAP so the ALU is not on the bus path
   reg        res_valid;
   reg [29:0] res_adr;
+  reg        sc_hit;   // the reservation matches the request's word, one cycle late
 
   wire       is_lr = i_cpu_amo_op == OP_LR;
   wire       is_sc = i_cpu_amo_op == OP_SC;
-  wire       sc_ok = res_valid & (res_adr == i_cpu_adr[31:2]);
 
   // op(old, rs2)
   wire signed [31:0] s_old = old;
@@ -92,9 +95,12 @@ module amo_unit (
                                                old;
 
   always @(posedge i_clk) begin
+    sc_hit <= res_valid & (res_adr == i_cpu_adr[31:2]);
     case (state)
       S_IDLE:
-        if (i_cpu_cyc & is_amo) state <= is_sc ? (sc_ok ? S_WRITE : S_SCFAIL) : S_READ;
+        if (i_cpu_cyc & is_amo) state <= is_sc ? S_SCCHK : S_READ;
+      S_SCCHK:
+        state <= sc_hit ? S_WRITE : S_SCFAIL;
       S_READ:
         if (i_mem_ack) begin
           old <= i_mem_rdt;

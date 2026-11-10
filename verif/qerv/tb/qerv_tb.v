@@ -1,7 +1,8 @@
 // M1 testbench for the QERV-Linux CPU (rtl/qerv/qerv_cpu.v).
 //
 // qerv_cpu -> servile_arbiter -> servant_ram (registered ack, like perf/serv_cpi), plus:
-//   * a store to MTIP_ADR sets the timer interrupt line to bit 0 of the data,
+//   * a store to MTIP_ADR sets the timer interrupt line to bit 0 of the data, one to
+//     SEIP_ADR the supervisor external interrupt line (SMODE),
 //   * stores to MTIME_ADR / MTIME_ADR+4 set the low / high half of mtime (SMODE time CSR),
 //   * a store to HALT_ADR ends the run (directed tests: 0 = pass, else failing test id),
 //   * a store to +tohost=<hex> ends the run (riscv-tests: 1 = pass, else (n << 1) | 1).
@@ -22,6 +23,7 @@ module qerv_tb;
   parameter        memfile  = "";
   parameter        MEMSIZE  = 65536;
   parameter [31:0] MTIP_ADR = 32'h8000_FFF8;
+  parameter [31:0] SEIP_ADR = 32'h8000_FFF4;
   parameter [31:0] MTIME_ADR = 32'h8000_FFF0;
   parameter [0:0]  SMODE    = 1'b0;
   parameter [31:0] HALT_ADR = 32'h8000_FFFC;
@@ -41,6 +43,7 @@ module qerv_tb;
   end
 
   reg        mtip = 1'b0;
+  reg        seip = 1'b0;                     // store to SEIP_ADR (SMODE external interrupt)
   reg [63:0] mtime = 64'd0;
 
   wire [31:0] ibus_adr, ibus_rdt, dbus_adr, dbus_dat, dbus_rdt;
@@ -54,6 +57,7 @@ module qerv_tb;
       .i_rst      (rst),
       .i_timer_irq(mtip),
       .i_mtime    (mtime),
+      .i_seip     (seip),
       .o_ibus_adr (ibus_adr),
       .o_ibus_cyc (ibus_cyc),
       .i_ibus_rdt (ibus_rdt),
@@ -172,6 +176,7 @@ module qerv_tb;
       if (mem_ack & mem_we) begin  // only the data side writes
         if (f) $fwrite(f, "S %08h %08h %1h %0d\n", mem_adr, mem_dat, mem_sel, cycle);
         if (mem_adr == MTIP_ADR) mtip = mem_dat[0];
+        if (mem_adr == SEIP_ADR) seip = mem_dat[0];
         if (mem_adr == MTIME_ADR) mtime[31:0] = mem_dat;
         if (mem_adr == MTIME_ADR + 4) mtime[63:32] = mem_dat;
         if (mem_adr == HALT_ADR) finish("HALT", mem_dat);

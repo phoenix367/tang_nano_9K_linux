@@ -1,0 +1,41 @@
+From: Tang Nano 9K QERV <noreply@localhost>
+Subject: [PATCH] mmc: mmc_spi: use the SPI controller's hardware CRC
+
+With CRC on (the default), mmc_spi computes every data block's CRC16 with crc_itu_t(): a
+third of the time of an SD block read on the QERV SoC's 42 MHz bit-serial core. Its SPI
+master computes the CRC as the bits shift (patch 0005: spi_controller.rx_crc_itu_t and
+spi_transfer.tx_crc_itu_t); use it when the controller has it. A read whose data needed
+bit-shifting falls back to software.
+---
+diff -Naur a/drivers/mmc/host/mmc_spi.c b/drivers/mmc/host/mmc_spi.c
+--- a/drivers/mmc/host/mmc_spi.c
++++ b/drivers/mmc/host/mmc_spi.c
+@@ -595,8 +595,12 @@
+ 	struct scratch		*scratch = host->data;
+ 	u32			pattern;
+ 
+-	if (host->mmc->use_spi_crc)
+-		scratch->crc_val = cpu_to_be16(crc_itu_t(0, t->tx_buf, t->len));
++	if (host->mmc->use_spi_crc) {
++		/* a controller that computes the CRC as the block goes out sends it itself */
++		host->crc.tx_crc_itu_t = spi->controller->tx_crc_itu_t;
++		if (!host->crc.tx_crc_itu_t)
++			scratch->crc_val = cpu_to_be16(crc_itu_t(0, t->tx_buf, t->len));
++	}
+ 
+ 	status = spi_sync_locked(spi, &host->m);
+ 	if (status != 0) {
+@@ -743,7 +747,12 @@
+ 	}
+ 
+ 	if (host->mmc->use_spi_crc) {
+-		u16 crc = crc_itu_t(0, t->rx_buf, t->len);
++		u16 crc;
++
++		/* the controller's CRC of the bits received, unless they had to be shifted */
++		if (bitshift || !spi->controller->rx_crc_itu_t ||
++		    spi->controller->rx_crc_itu_t(spi, t, &crc))
++			crc = crc_itu_t(0, t->rx_buf, t->len);
+ 
+ 		be16_to_cpus(&scratch->crc_val);
+ 		if (scratch->crc_val != crc) {

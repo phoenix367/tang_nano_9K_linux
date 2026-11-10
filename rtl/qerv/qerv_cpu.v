@@ -22,6 +22,7 @@ module qerv_cpu #(
     input  wire        i_rst,
     input  wire        i_timer_irq,            // CLINT mtip
     input  wire [63:0] i_mtime,                // CLINT mtime (SMODE: time/timeh CSRs)
+    input  wire        i_seip,                 // SMODE: supervisor external interrupt (PLIC)
     // instruction bus
     output wire [31:0] o_ibus_adr,
     output wire        o_ibus_cyc,
@@ -42,13 +43,13 @@ module qerv_cpu #(
 
   // core side (virtual with SMODE)
   wire [31:0] ibus_adr, ibus_rdt;
-  wire        ibus_cyc, ibus_ack, ibus_fault;
+  wire        ibus_cyc, ibus_sel, ibus_ack, ibus_fault;
   wire [31:0] dbus_adr, dbus_dat, dbus_rdt;
   wire [ 3:0] dbus_sel;
   wire        dbus_we, dbus_cyc, dbus_ack, dbus_amo, dbus_fault, dbus_fault_we;
   wire [ 4:0] dbus_amo_op;
   wire [ 1:0] priv;
-  wire        sum, mxr, satp_mode, sfence;
+  wire        sum, mxr, satp_mode, xlate, sfence;
   wire [19:0] satp_ppn;
   // AMO unit input (physical)
   wire [31:0] pd_adr, pd_dat, pd_rdt;
@@ -76,6 +77,7 @@ module qerv_cpu #(
       .i_timer_irq  (i_timer_irq),
       .o_ibus_adr   (ibus_adr),
       .o_ibus_cyc   (ibus_cyc),
+      .o_ibus_sel   (ibus_sel),
       .i_ibus_rdt   (ibus_rdt),
       .i_ibus_ack   (ibus_ack),
       .o_dbus_adr   (dbus_adr),
@@ -94,6 +96,7 @@ module qerv_cpu #(
       .i_ext_ready  (mdu_ready),
       .o_mdu_valid  (mdu_valid),
       .i_mtime        (i_mtime),
+      .i_seip         (i_seip),
       .i_ibus_fault   (ibus_fault),
       .i_dbus_fault   (dbus_fault),
       .i_dbus_fault_we(dbus_fault_we),
@@ -101,6 +104,7 @@ module qerv_cpu #(
       .o_sum          (sum),
       .o_mxr          (mxr),
       .o_satp_mode    (satp_mode),
+      .o_xlate        (xlate),
       .o_satp_ppn     (satp_ppn),
       .o_sfence       (sfence)
   );
@@ -113,11 +117,12 @@ module qerv_cpu #(
           .i_priv         (priv),
           .i_sum          (sum),
           .i_mxr          (mxr),
-          .i_satp_mode    (satp_mode),
+          .i_xlate        (xlate),
           .i_satp_ppn     (satp_ppn),
           .i_sfence       (sfence),
           .i_ibus_adr     (ibus_adr),
           .i_ibus_cyc     (ibus_cyc),
+          .i_ibus_sel     (ibus_sel),
           .o_ibus_rdt     (ibus_rdt),
           .o_ibus_ack     (ibus_ack),
           .o_ibus_fault   (ibus_fault),
@@ -155,6 +160,7 @@ module qerv_cpu #(
       assign o_dbg_fetch = i_ibus_ack;
       assign o_dbg_pc    = ibus_adr;
       assign pd_fetch    = 1'b0;
+      wire unused_sel = ibus_sel;
       assign ibus_fault = 1'b0;
       assign {pd_adr, pd_dat, pd_sel, pd_we, pd_cyc, pd_amo, pd_amo_op} =
              {dbus_adr, dbus_dat, dbus_sel, dbus_we, dbus_cyc, dbus_amo, dbus_amo_op};

@@ -12,7 +12,12 @@ the board, with real fork and pipelines; `doc/stage2_plan.md` has the plan and s
 board autoboots the MMU kernel from its flashes: `~ #` 17 s after the boot ROM prompt at
 42 MHz (12 s after a UART-loaded `B`). The stage-1 milestones (M0 software image in the emulator →
 M1 core → M2 SoC sim → M3 fit → M4 board), memory map and open decisions are in
-`doc/stage1_plan.md`. Update this file as decisions land. Don't describe planned structure as
+`doc/stage1_plan.md`. HDMI video works on the board too: a 640×480 RGB565 framebuffer in
+PSRAM, scanned out over HDMI, with a boot splash from the ROM and, in the MMU kernel,
+`/dev/fb0` plus an 80×30 hardware text console mirroring the UART shell
+(`doc/video_plan.md`: plan, status, results). The MMU kernel also has an I2C bus (the
+ov7670 project's OpenCores master) and the microSD card over SPI (`doc/peripherals.md`).
+Update this file as decisions land. Don't describe planned structure as
 if it exists.
 
 ## Build commands
@@ -30,6 +35,24 @@ if it exists.
     42.004 MHz at the worst-case corner; the worst paths are the reset fan-out). The rPLL wrapper `fpga/src/gowin_rpll/gowin_rpll.v` is written by hand (the
     user's call: no regeneration needed). If its frequency changes, change the SDC's
     multiply/divide and `CPU_HZ` too.
+  - **Video (`VIDEO=1 fpga/build.sh`, doc/video_plan.md):**
+    - A second hand-written rPLL (`gowin_rpll_video.v`) makes 126 MHz, and a `CLKDIV` "5"
+      the 25.2 MHz pixel clock.
+    - `hdmi_phy_gowin.v` serializes onto pins 68–75. These are shared with the RGB LCD
+      connector: no panel plugged in.
+    - build.sh writes `TANG9K_VIDEO` into `tang9k_cfg.v`, and one SDC,
+      `fpga/build/tang9k_soc.sdc`: `fpga/src/tang9k_soc.sdc` plus the video clocks. Gowin
+      reads each SDC file on its own, so a second SDC can't refer to the first one's clocks.
+    - Stage 2 + video + text mode + I2C + SD: 74% logic (89% of CLS), BSRAM 24/26, TNS 0.
+      - Fmax swings with placement: 45.7 MHz in one build, 42.25 MHz after the +7-LUT
+        SD CRC.
+      - Without the AMO unit's registered SC compare it was 38.4–39.9 MHz
+        (`doc/peripherals.md`).
+    - `SDC_MEM_MULT` (default 28) over-constrains the SDC only, for experiments. 29/30 made
+      placement worse.
+    - The font ROM is `rtl/video/font8x16.hex` (the kernel's CP437 `font_8x16`); build.sh
+      writes its path as `TANG9K_FONT_FILE`.
+    - `fpga/probe_hdmi/run.sh` is a CPU-less colour-bar probe (~10 s build).
   - **Avoid memory_clk ~77.6–81 MHz:** with this IP netlist, PSRAM channel 1 (and at 81 MHz
     both) never calibrates there, and the CPU hangs on its first PSRAM access. 54–77.1 and
     84–135 MHz calibrate. `fpga/probe/run.sh TAG IDIV FBDIV ODIV` builds a CPU-less probe
@@ -45,7 +68,10 @@ if it exists.
     RAM contents are not kept), cache, TLB, CPU and peripherals, so the boot ROM starts over. LEDs: heartbeat,
     PLL lock, PSRAM calibrated, UART TX, reset, poweroff.
   - **SYSCON status words** (read at 0x1110_0000 + 4·i, layout in `soc_top.v`): calib bits,
-    PSRAM commands and read beats per channel, cache misses and write-backs.
+    PSRAM commands and read beats per channel, cache misses and write-backs. Words 8–13 are
+    the video registers CTRL/BASE/STATUS/YOFF/TSTART/CURSOR (writable; `video_ctrl.v`).
+    - Poweroff (0x5555) and reboot (0x7777) act only on writes to offset 0. Before the
+      fix, any SYSCON write of those values counted.
   - **Flash pins (59–62) are MSPI dual-purpose pins:** the build passes
     `GW_OPTIONS="-use_mspi_as_gpio 1 -use_sspi_as_gpio 1"`. A build from the IDE needs the
     same in Project → Configuration → Dual-Purpose Pin.
@@ -53,11 +79,18 @@ if it exists.
     Fmax 42.004 MHz vs 42, and IP-internal hold violations of the known ov7670 class).
 - **Boot ROM monitor + host tool (M4):** `sw/bootrom/bootrom.S` prints a banner and a `> `
   prompt and takes single-byte commands with binary LE arguments: `l` load (replies a djb2
-  hash), `c` hash memory, `m` memtest, `s` status, `b` boot RAM, `f` boot from flash
-  (autoboot after 2 s if the flash holds an image), `q`/`r` poweroff/reboot.
+  hash), `c` hash memory, `m` memtest, `s` status (SYSCON words 0–10), `b` boot RAM, `f` boot
+  from flash (autoboot after 2 s if the flash holds an image), `q`/`r` poweroff/reboot, `v`
+  video base (0 = colour bars).
+  - **Video at reset:** with video present, the ROM draws the flash's boot splash (a
+    run-length list, header word 4 "SPLH") right after the banner and turns scanout on.
+  - **Entering a kernel:** a framebuffer that isn't on yet (still bars) is cleared (~0.1 s)
+    and turned on; one that is on (splash, `v`) is kept.
   - `sw/tools/qerv_boot.py --bitstream fpga/impl/pnr/tang9k_soc.fs --linux [--memtest]
     [--input 'cmd\n...']` loads the bitstream into SRAM, uploads Image + DTB, boots, logs
-    the console and types the input (one character per echo).
+    the console and types the input (one character per echo). `--fb IMAGE|test|bars` shows
+    an image on HDMI: the image is loaded through the uncached alias, then the ROM's `v`
+    turns scanout on.
   - **The BL702 USB-UART bridge applies the baud rate of the previous port open**, so open
     the port twice (`qerv_boot.py` and `fpga/probe/beacon.py` do).
   - In simulation, `sim/soc/run.sh` sends `b` (or `f` with `FLASH=1`) at the prompt;
@@ -80,17 +113,37 @@ if it exists.
     - The script passes `--location` from `--scan-cables`.
     - It erases the FPGA's SRAM first (`--run 24`). With a design running, the bridge write
       crawls (>12 min).
+    - The bridge sometimes hangs at the first sector erase (5 of 12 runs). The hung runs
+      reported bridge status 0x0003F020, the good ones 0x0001F020. Retries in the same state
+      hang too; reconfiguring the FPGA cleared it.
+    - So a watchdog SIGKILLs a stuck attempt after 60 s. The next attempt first
+      reconfigures (`openFPGALoader -r`), detaches ftdi_sio again and rescans the cable.
+    - A stuck `programmer_cli` ignores SIGTERM, and a failing `kill` under `set -e` used to
+      end the script. The SRAM erase is bounded too (30 s).
+    - It also writes the boot splash: `sw/tools/mksplash.py` (default picture, or
+      `SPLASH=<image>`), then `sw/mkflash.py --splash`.
   - **Internal flash (persistent bitstream):** `openFPGALoader -b tangnano9k -f <fs>`, ~12 s
     with a CRC check. `qerv_boot.py --reconfig` reloads it (openFPGALoader -r), as at
     power-on.
-  - **What the board holds now:** the 42 MHz stage-2 bitstream with the micro-TLB (SMODE=1,
-    reset on pin 3; a copy is `/mnt/data/build/tang9k_linux/tang9k_soc_smode1_42mhz_utlb.fs`)
-    in the internal flash, and the MMU Linux image (S-mode flag) in the SPI flash. At
-    power-up it autoboots Linux: `~ #` about 17 s after the boot ROM prompt.
+  - **What the board holds now:**
+    - Internal flash: the stage-2 + video bitstream with the splash boot ROM (SMODE=1
+      VIDEO=1, reset on pin 3; copy at `/mnt/data/build/tang9k_linux/tang9k_soc_video_v2.fs`;
+      without video: `tang9k_soc_smode1_42mhz_utlb.fs`).
+    - SPI flash: the MMU Linux image (fbcon, framebuffer DT, S-mode flag) plus the boot
+      splash (the image from before video is `flash_mmu_pre_video.bin` there).
+    - At power-up the splash is on screen from the boot ROM on. Linux autoboots, and when
+      its shell starts the screen switches to the framebuffer console: `~ #` about 19.4 s
+      after the prompt.
   - **Checking the flash:** `qerv_boot.py --hash-flash flash.bin` has the boot ROM hash the
     flash window (2.7 MB in ~18 s). `--flash-boot` boots it, and `--autoboot` loads the
     bitstream and sends nothing (the power-up path).
-  - The console UART is `/dev/ttyUSB1` (interface 1); JTAG is interface 0.
+  - The console UART is `/dev/ttyUSB1` (interface 1); JTAG is interface 0. It runs at 1 Mbaud
+    8N1, fixed in the FPGA.
+  - `sw/tools/console.sh [gtkterm|miniterm|--prime]` primes the port at 1 Mbaud (the bridge
+    quirk above) and starts gtkterm. A terminal that opens the port once after something
+    used 9600 otherwise shows garbage. The script refuses if the port is in use.
+  - Opening the port at another rate while a terminal has it open changes that terminal's
+    line rate too.
 - **Fit probes** (`fit/<probe>/`) measure one CPU core alone on the GW1NR-9:
   - **Wrapper:** an LFSR drives the CPU's inputs and every output is XOR-folded onto one LED,
     so nothing is pruned and the design still goes through PnR. This adds ~100 LUTs and ~70 FFs.
@@ -128,20 +181,51 @@ if it exists.
   for KianV are wildly inflated. Use GowinSyn for any utilization figure.
 - **QERV SoC (M2):** `rtl/soc/soc_top.v` contains:
   - qerv_cpu → servile_arbiter → an address decoder (memory map in `doc/stage1_plan.md`, the
-    same as the emulator)
-  - `l1_cache.v`: 16 KB unified, direct-mapped, write-back, in front of the Gowin PSRAM IP user
-    interface
-  - `uart_16550.v` (polled, 16-byte FIFOs), `clint.v`, `syscon.v`
+    same as the emulator; `0x9000_0000` is the uncached alias of the PSRAM)
+  - **Read data:** each slave's registered ack selects its registered read data (AND-OR). The
+    address decode stays out of the read path, which is the SoC's critical one.
+  - `l1_cache.v`: 16 KB unified, direct-mapped, write-back. It asks `psram_arb.v` for each
+    PSRAM command. The arbiter is the IP's register stage and shares the IP with the video
+    DMA: CPU first, the DMA first only when its line deadline is near. The cache also serves
+    the uncached alias: posted single-beat writes and beat-0 reads.
+  - **One write stream:** both channels' wr_data/data_mask carry the same stream. A write
+    enables bytes only in its granted cycle, and writes are kept 8 cycles apart.
+  - `video_ctrl.v` (`VIDEO=1`): registers, `video_dma.v`, a 2-line buffer and `video_out.v`
+    on the pixel clock.
+    - **Text mode** (CTRL bit 2): an 80×30 text buffer at `0x1180_0000` (write-only,
+      {attribute, character} cells, the Linux VT's layout), a CP437 font ROM, TSTART
+      (hardware scroll) and CURSOR registers. The DMA stays idle in text mode.
+  - **I/O register stage:** every I/O slave decodes a registered copy of the request (+1
+    cycle per I/O access); only PSRAM (`0x8`/`0x9`) keeps the direct path.
+  - `uart_16550.v` (256-byte block-RAM FIFOs, interrupt output), `clint.v`, `syscon.v`
+  - `plic.v` at `0x1200_0000`: a minimal `sifive,plic-1.0.0` with one source (the UART) and
+    one context, the hart's S-mode external interrupt (SEIP). The MMU kernel's DT uses it
+    (`interrupts-extended = <&plic 1>`, `fifo-size = <256>`). The no-MMU kernel and the boot
+    ROM still poll the UART.
+    - With the interrupt, `dmesg` to ttyS0 takes 1.3 s instead of 6.9 s (polling refilled
+      16 bytes per 10 ms tick).
+    - The HDMI console is the hardware text mode (qervcon, below): `dmesg > /dev/tty1` takes
+      2.8 s, against 55 s with fbcon on the framebuffer (and Y-wrap panning didn't help:
+      fbcon never panned).
   - `spi_flash_xip.v`: read-only flash window at `0x2000_0000`
+  - **I2C and microSD** (`doc/peripherals.md`):
+    - `rtl/i2c/`: the ov7670 project's OpenCores I2C master at `0x1130_0000`, pins 25/26,
+      PLIC source 2. Linux uses mainline `i2c-ocores`.
+    - `spi_master.v`: the SD slot in SPI mode at `0x1140_0000` (pins 36–39). Data accesses
+      wait on the bus while a byte or word shifts. Linux: `spi-qerv` (patch `0005`) +
+      `mmc_spi`.
   - `bootrom.v`, holding `sw/bootrom/bootrom.S`
 
-  It is one clock domain, the PSRAM IP's user clock.
+  It is one clock domain, the PSRAM IP's user clock, plus the pixel clock with video.
   - **Boot ROM:** copies Image + DTB from flash (layout from `sw/mkflash.py`: header `QRVL`,
     DTB @0x1000, Image @0x2000) to `0x80000000` / `0x807FF000`, or uses preloaded RAM. It then
     enters the kernel with a0=0, a1=DTB.
   - **Full-boot simulation:** `sim/soc/run.sh` (Verilator; env `INPUT`, `FLASH=1`, `W`,
     `MAX_CYCLES`, `QUIET=1`). It runs ~2.4 MHz, so a full boot takes ~8 min. The console goes
     to `sim/soc/results/`.
+    - `VIDEO=1` builds the video controller and runs at the board's 42 MHz (`+clk_hz`) with
+      the 25.2 MHz pixel clock between the CPU clock's edges.
+    - `FRAME_DUMP=1` writes every 60th frame to `$WORK/frames-<tag>/` as PPM.
   - **PSRAM model:** `rtl/sim/psram_ui_model.v` was matched edge-for-edge to the real IP
     gate-level netlist (`verif/psram/run.sh`, `--ip` for the ~15 min netlist run; details in
     `verif/psram/NOTES.md`):
@@ -168,8 +252,21 @@ if it exists.
     - `~ #` after 1.88G cycles = 69.5 s (80.3M instructions, CPI 23.4); flash copy +4.7 s.
     - About 4.5× more timer ticks than the emulator model, so tick/sched/timekeeping work is
       ~14% of instructions.
-  - **Unit tests:** `verif/cache/tb_cache.v` is random traffic with an 8-line cache (Icarus,
-    ~45 s). `verif/spi_flash/tb_spi_flash.v` covers the flash reader.
+  - **Unit tests:**
+    - `verif/cache/run.sh` (~4 min): cache + arbiter. Random cached and uncached traffic with
+      an 8-line cache, plus a video-like DMA reader; the PSRAM model's protocol checker must
+      stay silent.
+    - `verif/video/run.sh`: TMDS/timing/PHY, then text frames (TSTART, cursor) against a
+      reference model. PHY=1 decodes the `OSER10` model's output; PHY=0 is the full 640×480
+      timing (~7 min). `PHYS=1` runs one.
+    - `verif/video/run_sys.sh` (~3 min): cache + arbiter + video controller at 42/25.2 MHz
+      under worst-case CPU traffic, every pixel checked.
+    - `verif/spi_flash/tb_spi_flash.v` covers the flash reader.
+  - **I2C and SPI tests:** `verif/i2c/run.sh` (the core against
+    `rtl/sim/i2c_eeprom_model.v`, which `tb_soc.v` also puts on the SoC sim's I2C bus at
+    0x50) and `verif/spi/run.sh` (the SD SPI master against a mode-0 slave model).
+  - **UART tests:** `verif/uart/run.sh` (TX burst through the 256-byte FIFO, RX, overrun,
+    interrupt and IIR).
   - **UART in polled mode:** IIR must report pending RX/THRE sources (gated by IER) even
     without an IRQ line. The 8250 driver's poll timer calls the IRQ handler, which returns
     at once on "no interrupt". With IIR stuck at 0x01, TX still works through the driver's
@@ -182,7 +279,8 @@ if it exists.
     - `commandArgsPlusMatch` returns "" (not NULL) when a plusarg is absent.
 - **Stage 2 (doc/stage2_plan.md):**
   - **CPU:** `qerv_cpu` `SMODE=1` = SERV `LINUX=1 SMODE=1` (U/S/M, delegation, sret, S CSRs,
-    satp, time/timeh from the CLINT's mtime) + `rtl/qerv/sv32_mmu.v` (TLB in BSRAM, a
+    satp, time/timeh from the CLINT's mtime, the S external interrupt SEIP: mie/sie.SEIE,
+    mideleg bit 9, priority MTI > SEI > STI) + `rtl/qerv/sv32_mmu.v` (TLB in BSRAM, a
     one-page micro-TLB per bus that skips the TLB's 2 cycles, read-only walker, Svade).
     `SMODE=0` is the stage-1 core, unchanged (CPI and tests identical).
   - **One physical bus with SMODE=1:** the MMU merges fetches, data and PTE reads onto the
@@ -190,6 +288,40 @@ if it exists.
     traces and profiles come from `qerv_cpu`'s `o_dbg_fetch`/`o_dbg_pc` in both modes.
   - **Software:** `CONFIG=mmu sw/build.sh` → `images-tang9k-mmu/`. Keep `CONFIG_EFI` off: it
     forces the C extension on.
+    - The MMU image adds `board/tang9k-mmu/rootfs-overlay` and `busybox.fragment` to the
+      shared stage-1 ones.
+    - The overlay's inittab mounts devpts and runs `/usr/bin/console-shell`. Its busybox
+      `script` mirrors the UART shell onto the HDMI text console on tty1 (the board has
+      no keyboard).
+    - `console-shell` also turns info-level kernel messages off the serial console, so none
+      land after the first prompt (they used to stall `qerv_boot.py`).
+    - **Kernel video drivers** (patches in `sw/br2-external/patches/linux/`):
+      - `0003` qervfb: `/dev/fb0` with Y-wrap panning (YOFF).
+      - `0004` qervcon (`CONFIG_QERV_CONSOLE`, DT `qerv,tang9k-text`): the text console,
+        replacing fbcon (`CONFIG_FRAMEBUFFER_CONSOLE` off). It keeps the ROM's splash on
+        screen until the first character other than a blank. It shows the framebuffer while
+        a program has the VT in KD_GRAPHICS.
+      - Its probe costs ~0.2 s of boot. `do_take_over_console` needs `console_lock()`.
+      - `0005` spi-qerv: the microSD slot's SPI master, plus hooks in `spi.h` for its
+        hardware CRC16. `0006` makes mmc_spi use them (`doc/peripherals.md`).
+    - The MMU kernel has `CONFIG_BLOCK` for the SD card (MMC, mmc_spi, VFAT) and I2C
+      (`i2c-ocores`, `/dev/i2c-0`). busybox has the i2c tools, `mkfs.vfat` and `devmem`.
+    - **Cost of I2C + SD:** +500 KB of kernel; 1,916 KB available after boot (2,820 before).
+      `Run /init` moves from 10.3 to 12.5 s.
+    - **SD writes are broken (open):** in the first write test, most of a 512 KB file read
+      back as zeros, with no errors logged (`doc/peripherals.md`). Don't write to the card
+      until this is fixed.
+    - **SD reads:** 72 KB/s buffered (95 KB/s raw) with the SPI-mode CRC on (the default).
+      The SPI master computes the CRC16 (patches `0005`/`0006`); in software it was
+      44 KB/s.
+    - **Mounting the card:** `mount /mnt` (the overlay's `/etc/fstab` adds `usefree`).
+      Without `usefree`, the first `df` reads the whole FAT (~3.5 min for 4 GB) in
+      uninterruptible I/O, so the shell looks hung.
+    - **On-board kernel profiling:** `CONFIG_PROFILING` plus `profile=5` in bootargs; dump
+      `/proc/profile` with busybox `od -D` and resolve with System.map. This is how the SD
+      costs were found.
+    - `CONFIG_VT` needs `patches/linux/0002-vt-four-virtual-consoles.patch`: registering
+      63 VT devices took 2.6 s of `chr_dev_init`.
   - **Boot-time findings (both kernels):**
     - `CONFIG_LEGACY_PTYS` must stay off: `pty_init` registering 256 BSD pty pairs took 44
       of 55 s.
@@ -207,7 +339,8 @@ if it exists.
     the board, `initcall_debug loglevel=8` in a DTB loaded with `qerv_boot.py --load` times
     every initcall.
   - **Boot ROM:** `B` boots the kernel in S-mode under the SBI v0.1 shim in the ROM (stack in
-    the DT-reserved page 0x807FE000). `sw/mkflash.py --smode` makes `f` / autoboot do the same.
+    the DT-reserved page 0x807FE000). It delegates the S timer and S external interrupts
+    (mideleg 0x220). `sw/mkflash.py --smode` makes `f` / autoboot do the same.
   - **Simulation:** `CONFIG=mmu sim/soc/run.sh` (CPU_SMODE=1, MMU images, boot ROM `B`;
     results in `sim/soc/results/soc_w4-mmu.*`).
   - **Board:** `SMODE=1 fpga/build.sh` (default 0 = stage-1 CPU), then
@@ -217,8 +350,15 @@ if it exists.
     long. The first version missed 36 MHz at 29 MHz. A compare may gate a strobe, but never
     anything that selects the address: `servile_arbiter` selects the address with ibus_stb.
     A micro-TLB hit gating ibus_cyc fell to 38.7 MHz, which is why the bus is merged.
+    - SERV's `o_ibus_cyc` is `ibus_cyc & !i_rst`, which puts the reset net in front of every
+      address select. The MMU selects with `o_ibus_sel` (the register, no reset gating; added
+      to the fork). With video, that path was 36.6 MHz before the change.
+    - Likewise the MMU's translation enable is `o_xlate`, a register in the CSR block updated
+      with priv and satp.MODE, not logic on them. With the PLIC and UART interrupt, the priv
+      → xlate → address path made 40.1 MHz; with `o_xlate`, 42.06 MHz.
   - **Tests:**
-    - `verif/qerv/run_directed.sh` runs `s2_*` tests with SMODE=1 against `iss.py --smode`
+    - `verif/qerv/run_directed.sh` runs `s2_*` tests with SMODE=1 against `iss.py --smode`.
+      `s2_eirq` covers SEI; the TB drives SEIP with a store to `0x8000FFF4`.
       (`TESTS="s2_mmu"` selects).
     - `SMODE=1 [ENV=v] verif/qerv/run_riscv_tests.sh` runs the riscv-tests on the stage-2
       core. `ENV=v` (user tests on demand-paged SV32, 512 KB TB RAM) takes ~10 min at W=4.
@@ -279,8 +419,8 @@ Multipliers use one DSP `MULT36X36` in every row. "Logic" counts each RAM16 as 6
   AMO unit's adder and comparators). The AMO write data is registered in the unit's GAP
   cycle; with it combinational, Fmax was 44 MHz. The next-worst path is SERV's rd mux, where
   the readable mie/mip add a level.
-- **Atomic cycle costs (W=4 / W=1):** AMO 26/74, LR 23/71, SC 22–23/70–71. Plain lw/sw are
-  22/70.
+- **Atomic cycle costs (W=4 / W=1):** AMO 26/74, LR 23/71, SC 23–24/71–72 (one more than
+  before, since the reservation compare is registered). Plain lw/sw are 22/70.
 
 ## Boot-time estimate (2026-11-10)
 
@@ -429,7 +569,9 @@ fixed under `LINUX=1`.
   - Exact 12-bit CSR decode: unknown CSRs read 0 and ignore writes.
   - fence/fence.i/wfi as no-ops, and the mcause fix.
 
-  The changed files are `serv_decode.v`, `serv_csr.v`, `serv_top.v` and `serv_rf_top.v`.
+  The changed files are `serv_decode.v`, `serv_csr.v`, `serv_top.v` and `serv_rf_top.v`;
+  `serv_state.v` also exports `o_ibus_sel` (ibus_cyc without the reset gating), and
+  `serv_csr.v` (SMODE) has SEIP and `o_xlate`.
   Still absent: illegal-instruction traps, external IRQ, S-mode and MMU (stage 2).
 
 Linux requires at least RV32IMA. For a normal kernel it also needs an SV32 MMU and

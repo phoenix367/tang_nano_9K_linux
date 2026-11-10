@@ -49,12 +49,13 @@ module sv32_mmu #(
     input  wire [ 1:0] i_priv,
     input  wire        i_sum,
     input  wire        i_mxr,
-    input  wire        i_satp_mode,
+    input  wire        i_xlate,              // satp.MODE & priv < M (a register in the core)
     input  wire [19:0] i_satp_ppn,
     input  wire        i_sfence,
     // core instruction bus (virtual)
     input  wire [31:0] i_ibus_adr,
     input  wire        i_ibus_cyc,
+    input  wire        i_ibus_sel,           // i_ibus_cyc without its reset gating (selects)
     output wire [31:0] o_ibus_rdt,
     output wire        o_ibus_ack,
     output wire        o_ibus_fault,
@@ -106,13 +107,15 @@ module sv32_mmu #(
   reg  [EW-1:0] fill;
 
   // ---------------------------------------------------------------- request
-  // the core never drives both buses; ibus_cyc is a register in the core, dbus_cyc a decode
-  wire        is_d  = !i_ibus_cyc;
+  // the core never drives both buses. Selects use i_ibus_sel, the core's ibus_cyc register
+  // without the reset gating of i_ibus_cyc (that reset net made the bus address path the
+  // SoC's critical one); dbus_cyc is a decode.
+  wire        is_d  = !i_ibus_sel;
   wire        req   = i_ibus_cyc | i_dbus_cyc;
-  wire        xlate = i_satp_mode & !i_priv[1];
+  wire        xlate = i_xlate;
   // the live request: TLB read address in IDLE and the physical bus address; once accepted,
   // the state machine uses the latched bus (req_d)
-  wire [31:0] va_i  = i_ibus_cyc ? i_ibus_adr : i_dbus_adr;
+  wire [31:0] va_i  = i_ibus_sel ? i_ibus_adr : i_dbus_adr;
   wire [31:0] va    = req_d ? i_dbus_adr : i_ibus_adr;
   wire        is_lr = i_dbus_amo & (i_dbus_amo_op == 5'b00010);
   wire        is_st = req_d & i_dbus_we & !is_lr;
@@ -232,15 +235,15 @@ module sv32_mmu #(
   wire        acc  = st == S_ACC;
   wire        core = !walk;                                    // the core's request is on the bus
   // in ACC the micro-TLB entry of the active bus holds the page (filled in LOOK or matched)
-  wire [19:0] u_ppn = i_ibus_cyc ? u_ippn : u_dppn;
+  wire [19:0] u_ppn = i_ibus_sel ? u_ippn : u_dppn;
 
   // the address uses registered state and the core's registered address only
   assign o_mbus_cyc    = walk | (req & pass) | fast_i | fast_d | acc;
   assign o_mbus_adr    = walk ? pte_adr : {xlate ? u_ppn : va_i[31:12], va_i[11:0]};
   assign o_mbus_dat    = i_dbus_dat;
   assign o_mbus_sel    = walk ? 4'hF : i_dbus_sel;
-  assign o_mbus_we     = core & !i_ibus_cyc & i_dbus_we;   // dbus_we/amo are stale on fetches
-  assign o_mbus_amo    = core & !i_ibus_cyc & i_dbus_amo;
+  assign o_mbus_we     = core & !i_ibus_sel & i_dbus_we;   // dbus_we/amo are stale on fetches
+  assign o_mbus_amo    = core & !i_ibus_sel & i_dbus_amo;
   assign o_mbus_amo_op = i_dbus_amo_op;
   assign o_mbus_fetch  = core & i_ibus_cyc;
 

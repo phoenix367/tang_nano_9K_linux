@@ -36,6 +36,14 @@
 		sbi@807fe000 {
 			reg = <0x0 0x807fe000 0x0 0x1000>;
 		};
+
+		/* HDMI framebuffer, 640 x 480 RGB565 (doc/video_plan.md). The video DMA reads it
+		   straight from PSRAM, so Linux must only reach it through the uncached alias
+		   (simple-framebuffer below); reserved here so nothing uses the cached address.
+		   Mapped, like the SBI page, to keep the linear map's megapages. */
+		framebuffer@80700000 {
+			reg = <0x0 0x80700000 0x0 0x96000>;
+		};
 	};
 
 	cpus {
@@ -67,13 +75,81 @@
 		compatible = "simple-bus";
 		ranges;
 
-		/* 16550 register subset, fixed baud (divisor latch ignored), polled: no IRQ. */
+		/* 16550 register subset, fixed baud (divisor latch ignored), 256-byte FIFOs, its
+		   interrupt on PLIC source 1. */
 		uart0: serial@10000000 {
 			compatible = "ns16550a";
 			reg = <0x0 0x10000000 0x0 0x100>;
 			clock-frequency = <16000000>;
 			current-speed = <1000000>;
+			fifo-size = <256>;
+			interrupts-extended = <&plic 1>;
 			no-loopback-test;
+		};
+
+		/* Minimal PLIC (rtl/soc/plic.v): one source, one context = the hart's S-mode
+		   external interrupt. */
+		plic: interrupt-controller@12000000 {
+			compatible = "sifive,plic-1.0.0";
+			reg = <0x0 0x12000000 0x0 0x400000>;
+			#address-cells = <0>;
+			#interrupt-cells = <1>;
+			interrupt-controller;
+			interrupts-extended = <&cpu0_intc 9>;
+			riscv,ndev = <2>;
+		};
+
+		/* Set up by the boot ROM (splash or cleared, scanout on) before it enters the kernel.
+		   qervfb (patches/linux/0003): the framebuffer, and the video YOFF register
+		   (SYSCON word 11) for Y-wrap panning. */
+		framebuffer@90700000 {
+			compatible = "qerv,tang9k-fb";
+			reg = <0x0 0x90700000 0x0 0x96000>,	/* uncached alias of 0x80700000 */
+			      <0x0 0x1110002c 0x0 0x4>;	/* YOFF */
+			width = <640>;
+			height = <480>;
+			stride = <1280>;
+		};
+
+		/* qervcon (patches/linux/0004): the hardware text console. The text buffer
+		   (80 x 30 cells, write-only) and the video registers CTRL..CURSOR (SYSCON words
+		   8..13), which overlap the syscon node: the driver maps them without a request. */
+		textcon@11800000 {
+			compatible = "qerv,tang9k-text";
+			reg = <0x0 0x11800000 0x0 0x1800>,
+			      <0x0 0x11100020 0x0 0x18>;
+		};
+
+		/* OpenCores I2C master (rtl/i2c) on pins 25 (SDA) / 26 (SCL): 8-bit registers at
+		   word offsets, interrupt = PLIC source 2. */
+		i2c0: i2c@11300000 {
+			compatible = "opencores,i2c-ocores";
+			reg = <0x0 0x11300000 0x0 0x20>;
+			reg-shift = <2>;
+			reg-io-width = <4>;
+			opencores,ip-clock-frequency = <42000000>;
+			clock-frequency = <100000>;
+			interrupts-extended = <&plic 2>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+		};
+
+		/* SPI master on the microSD slot (rtl/soc/spi_master.v, spi-qerv in
+		   patches/linux/0005), the card in SPI mode through mmc_spi. SCK is 42 MHz / 2 at
+		   most; the slot has no card-detect line, so mmc_spi polls. */
+		spi@11400000 {
+			compatible = "qerv,tang9k-spi";
+			reg = <0x0 0x11400000 0x0 0x20>;
+			clock-frequency = <42000000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			mmc@0 {
+				compatible = "mmc-spi-slot";
+				reg = <0>;
+				spi-max-frequency = <21000000>;
+				voltage-ranges = <3300 3300>;
+			};
 		};
 
 		syscon: syscon@11100000 {

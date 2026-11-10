@@ -22,13 +22,15 @@ Machine model (see doc/stage1_plan.md, M1):
 
 With --smode, the stage-2 model (SERV LINUX=1 + SMODE=1, doc/stage2_plan.md):
   * U/S/M. mstatus SIE/MIE/SPIE/MPIE/SPP/MPP/SUM/MXR (MPP=10 reads and acts as 11);
-    sstatus is its S view. mie/sie: MTIE, STIE; mip/sip: MTIP (testbench), STIP (writable in
-    mip). medeleg bits 0,3,4,6,8,12,13,15; mideleg bit 5. scause like mcause. stvec,
+    sstatus is its S view. mie/sie: MTIE, STIE, SEIE; mip/sip: MTIP (testbench), STIP
+    (writable in mip), SEIP (testbench: a store to SEIP_ADR sets it to bit 0 of the data).
+    medeleg bits 0,3,4,6,8,12,13,15; mideleg bits 5 and 9. scause like mcause. stvec,
     sscratch, sepc, stval. satp MODE + PPN[19:0]. time/timeh = the testbench mtime (stores
     to MTIME_ADR / +4).
   * Interrupts are level-sensitive, before an instruction: MTI (mtip & MTIE & (priv < M |
-    MIE)) first, then STI (STIP & STIE & (delegated ? priv == U | priv == S & SIE : priv < M |
-    MIE)). ecall cause 8 + priv. A trap goes to S if priv < M and the cause is delegated.
+    MIE)) first, then SEI, then STI (pending & enabled & (delegated ? priv == U | priv == S &
+    SIE : priv < M | MIE)). ecall cause 8 + priv. A trap goes to S if priv < M and the cause
+    is delegated.
   * sret: priv <- SPP, SIE <- SPIE, SPIE <- 1, SPP <- U. sfence.vma and wfi are no-ops.
   * The tval CSR is only defined for misaligned accesses and page faults here (the RTL
     writes some value on every trap), so tests must not read it after other traps.
@@ -46,6 +48,7 @@ import sys
 MASK = 0xFFFFFFFF
 BASE = 0x80000000
 MTIP_ADR = 0x8000FFF8
+SEIP_ADR = 0x8000FFF4
 HALT_ADR = 0x8000FFFC
 MTIME_ADR = 0x8000FFF0
 
@@ -80,6 +83,7 @@ class ISS:
         self.mpp = 1
         self.mtie = 0
         self.mtip = 0
+        self.seip = 0
         self.csr = {0x305: 0, 0x340: 0, 0x341: 0, 0x342: 0, 0x343: 0}
         self.res = None
         self.fetches = []
@@ -91,6 +95,7 @@ class ISS:
             self.sie = self.spie = self.spp = self.sum = self.mxr = 0
             self.mpp = 0
             self.stie = self.stip = self.mideleg5 = 0
+            self.seie = self.mideleg9 = 0
             self.medeleg = 0
             self.satp = 0
             self.mtime = 0
@@ -110,6 +115,8 @@ class ISS:
         self.mem[a:a + n] = (val & ((1 << (8 * n)) - 1)).to_bytes(n, "little")
         if adr == MTIP_ADR:
             self.mtip = val & 1
+        if adr == SEIP_ADR:
+            self.seip = val & 1
         if adr == HALT_ADR or adr == getattr(self, "tohost", None):
             self.halt = val & MASK
         if adr == MTIME_ADR:
@@ -187,19 +194,19 @@ class ISS:
         if c == 0x100:
             return self.mstatus_s() & 0x000C0122
         if c == 0x304:
-            return (self.mtie << 7) | (self.stie << 5)
+            return (self.seie << 9) | (self.mtie << 7) | (self.stie << 5)
         if c == 0x104:
-            return (self.stie & self.mideleg5) << 5
+            return ((self.seie & self.mideleg9) << 9) | ((self.stie & self.mideleg5) << 5)
         if c == 0x344:
-            return (self.mtip << 7) | (self.stip << 5)
+            return (self.seip << 9) | (self.mtip << 7) | (self.stip << 5)
         if c == 0x144:
-            return (self.stip & self.mideleg5) << 5
+            return ((self.seip & self.mideleg9) << 9) | ((self.stip & self.mideleg5) << 5)
         if c in (0x342, 0x142):
             return self.csr[c] & 0x8000000F
         if c == 0x302:
             return self.medeleg & 0xB159
         if c == 0x303:
-            return self.mideleg5 << 5
+            return (self.mideleg9 << 9) | (self.mideleg5 << 5)
         if c == 0x180:
             return self.satp & 0x800FFFFF
         if c == 0xC01:
@@ -216,10 +223,12 @@ class ISS:
                 self.mie, self.mpie = (v >> 3) & 1, (v >> 7) & 1
                 self.mpp = 3 if (v >> 11) & 3 == 2 else (v >> 11) & 3
         elif c == 0x304:
-            self.mtie, self.stie = (v >> 7) & 1, (v >> 5) & 1
+            self.seie, self.mtie, self.stie = (v >> 9) & 1, (v >> 7) & 1, (v >> 5) & 1
         elif c == 0x104:
             if self.mideleg5:
                 self.stie = (v >> 5) & 1
+            if self.mideleg9:
+                self.seie = (v >> 9) & 1
         elif c == 0x344:
             self.stip = (v >> 5) & 1
         elif c in (0x342, 0x142):
@@ -227,7 +236,7 @@ class ISS:
         elif c == 0x302:
             self.medeleg = v & 0xB159
         elif c == 0x303:
-            self.mideleg5 = (v >> 5) & 1
+            self.mideleg5, self.mideleg9 = (v >> 5) & 1, (v >> 9) & 1
         elif c == 0x180:
             self.satp = v & 0x800FFFFF
         elif c in self.csr:
@@ -236,7 +245,8 @@ class ISS:
     def take_trap_s(self, cause, tval, epc):
         intr = cause >> 31
         code = cause & 0xF
-        deleg = (code == 5 and self.mideleg5) if intr else (self.medeleg >> code) & 1
+        deleg = ((code == 5 and self.mideleg5) or (code == 9 and self.mideleg9)) if intr \
+            else (self.medeleg >> code) & 1
         if self.priv != 3 and deleg:
             self.csr[0x141] = epc
             self.csr[0x142] = cause & 0x8000000F
@@ -256,12 +266,13 @@ class ISS:
 
     def pending_irq_s(self):
         mti = self.mtip and self.mtie and (self.priv != 3 or self.mie)
-        if self.mideleg5:
-            sen = self.priv == 0 or (self.priv == 1 and self.sie)
-        else:
-            sen = self.priv != 3 or self.mie
-        sti = self.stip and self.stie and sen
-        return 0x80000007 if mti else 0x80000005 if sti else None
+
+        def enabled(deleg):
+            return (self.priv == 0 or (self.priv == 1 and self.sie)) if deleg \
+                else (self.priv != 3 or self.mie)
+        sei = self.seip and self.seie and enabled(self.mideleg9)
+        sti = self.stip and self.stie and enabled(self.mideleg5)
+        return 0x80000007 if mti else 0x80000009 if sei else 0x80000005 if sti else None
 
     def take_trap(self, cause, tval, epc):
         if self.smode:

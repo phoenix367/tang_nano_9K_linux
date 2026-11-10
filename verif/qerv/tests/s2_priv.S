@@ -57,14 +57,14 @@ _start:
     li    t0, -1
     csrw  mie, t0
     csrr  a0, mie
-    CHECK(a0, 0xA0)
-    csrr  a0, sie                # STI not delegated: invisible in sie
+    CHECK(a0, 0x2A0)             # SEIE, MTIE, STIE
+    csrr  a0, sie                # STI/SEI not delegated: invisible in sie
     CHECK(a0, 0)
     csrw  mideleg, t0
     csrr  a0, mideleg
-    CHECK(a0, 0x20)
+    CHECK(a0, 0x220)
     csrr  a0, sie
-    CHECK(a0, 0x20)
+    CHECK(a0, 0x220)
     csrw  sie, zero
     csrr  a0, mie
     CHECK(a0, 0x80)

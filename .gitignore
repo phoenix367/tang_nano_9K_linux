@@ -9,5 +9,6 @@ sim/soc/results/*.break.txt
 fpga/impl/
 fpga/build/
 fpga/probe/build/
+fpga/probe_hdmi/build/
 sim/soc/results/*.rom_test.log
 __pycache__/

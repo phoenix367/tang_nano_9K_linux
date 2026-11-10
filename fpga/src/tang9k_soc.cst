@@ -27,6 +27,17 @@ IO_PORT "led_n[4]" PULL_MODE=UP DRIVE=8 BANK_VCCIO=1.8;
 IO_LOC "led_n[5]" 16;
 IO_PORT "led_n[5]" PULL_MODE=UP DRIVE=8 BANK_VCCIO=1.8;
 
+// HDMI (litex-boards sipeed_tang_nano_9k.py; p,n): ELVDS pairs on bank 1. These are also the
+// 40-pin RGB LCD connector's lines: no LCD panel plugged in.
+IO_LOC "tmds_clk_p" 69,68;
+IO_PORT "tmds_clk_p" PULL_MODE=NONE DRIVE=8;
+IO_LOC "tmds_d_p[0]" 71,70;
+IO_PORT "tmds_d_p[0]" PULL_MODE=NONE DRIVE=8;
+IO_LOC "tmds_d_p[1]" 73,72;
+IO_PORT "tmds_d_p[1]" PULL_MODE=NONE DRIVE=8;
+IO_LOC "tmds_d_p[2]" 75,74;
+IO_PORT "tmds_d_p[2]" PULL_MODE=NONE DRIVE=8;
+
 IO_LOC "flash_sck" 59;
 IO_PORT "flash_sck" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
 IO_LOC "flash_cs_n" 60;
@@ -35,3 +46,21 @@ IO_LOC "flash_mosi" 61;
 IO_PORT "flash_mosi" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
 IO_LOC "flash_miso" 62;
 IO_PORT "flash_miso" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+
+// I2C on pins 25 (SDA) / 26 (SCL), as in the ov7670 project: open drain with the weak
+// internal pull-ups (devices usually bring their own).
+IO_LOC "i2c_sda" 25;
+IO_PORT "i2c_sda" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 OPEN_DRAIN=ON BANK_VCCIO=3.3;
+IO_LOC "i2c_scl" 26;
+IO_PORT "i2c_scl" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 OPEN_DRAIN=ON BANK_VCCIO=3.3;
+
+// microSD slot in SPI mode (litex-boards sipeed_tang_nano_9k.py "spisdcard"): CLK 36,
+// CMD = MOSI 37, DAT3 = CS 38, DAT0 = MISO 39.
+IO_LOC "sd_clk" 36;
+IO_PORT "sd_clk" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "sd_mosi" 37;
+IO_PORT "sd_mosi" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "sd_cs_n" 38;
+IO_PORT "sd_cs_n" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC "sd_miso" 39;
+IO_PORT "sd_miso" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;

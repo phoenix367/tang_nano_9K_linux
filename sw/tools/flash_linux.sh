@@ -11,7 +11,8 @@
 # SoC bitstream again or reconfigure from the internal flash (qerv_boot.py --reconfig).
 #
 # Env: GOWIN_PATH (default /mnt/data/Gowin_V1.9.12.02_SP2_linux),
-#      WORK (default /mnt/data/build/tang9k_linux).
+#      WORK (default /mnt/data/build/tang9k_linux), SPLASH (boot splash picture; default: the
+#      one sw/tools/mksplash.py draws).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
@@ -22,9 +23,12 @@ case "${1:-mmu}" in
   nommu) IMG="$WORK/images-tang9k" DTB=tang9k.dtb OPT= ;;
   *)     echo "usage: $0 [mmu|nommu]" >&2; exit 1 ;;
 esac
-python3 "$REPO/sw/mkflash.py" "$IMG/Image" "$IMG/$DTB" "$IMG/flash.bin" $OPT
+# boot splash (doc/video_plan.md): SPLASH=<image> to use a picture, default: the generated one
+python3 "$REPO/sw/tools/mksplash.py" "$IMG/splash.rle" ${SPLASH:+"$SPLASH"}
+python3 "$REPO/sw/mkflash.py" "$IMG/Image" "$IMG/$DTB" "$IMG/flash.bin" $OPT --splash "$IMG/splash.rle"
 # programmer_cli cannot open the JTAG channel while the kernel's ftdi_sio driver holds it
 # (/dev/ttyUSB0; openFPGALoader re-attaches it on exit), so detach that interface first.
+detach_jtag() {
 python3 -I - <<'PY'
 import ctypes, ctypes.util, sys
 lib = ctypes.CDLL(ctypes.util.find_library("usb-1.0"))
@@ -38,17 +42,27 @@ if lib.libusb_kernel_driver_active(h, 0) == 1 and lib.libusb_detach_kernel_drive
     sys.exit("cannot detach ftdi_sio from the JTAG interface")
 lib.libusb_close(h)
 PY
+}
 cd "$GOWIN_PATH/Programmer/bin"
-# cable-index 4 = "USB Debugger A", the board's BL702; --location from the cable scan
-LOC=$(./programmer_cli --scan-cables 2>&1 | sed -n 's#.*Cable found:  USB Debugger A/0/\([0-9]*\)/.*#\1#p' | head -1)
 # The GAO-bridge write takes ~1 min, but now and then it hangs at the first sector erase
-# ("Erasing sector at 0... 0%"; seen in 2 of 6 runs, with and without a design running). A
-# watchdog stops such an attempt after 60 s and retries; each attempt starts by erasing the
-# FPGA's SRAM.
+# ("Erasing sector at 0... 0%"; 5 of 12 runs). The hung runs reported bridge status
+# 0x0003F020, the good ones 0x0001F020; once it hangs, retries in the same state hang too, and
+# reconfiguring the FPGA from its internal flash cleared it. So a watchdog stops a stuck
+# attempt after 60 s, and the next attempt first reconfigures (openFPGALoader -r), then
+# detaches ftdi_sio again and rescans the cable; each attempt starts by erasing the SRAM.
 LOG=$(mktemp)
 trap 'rm -f "$LOG"' EXIT
 for attempt in 1 2 3; do
-  ./programmer_cli --device GW1NR-9C --run 24 --cable-index 4 --location "${LOC:-0}" > /dev/null 2>&1
+  if [[ $attempt -gt 1 ]]; then
+    openFPGALoader -b tangnano9k -r > /dev/null 2>&1 || true
+    sleep 1
+  fi
+  detach_jtag
+  # cable-index 4 = "USB Debugger A", the board's BL702; --location from the cable scan
+  LOC=$(./programmer_cli --scan-cables 2>&1 | sed -n 's#.*Cable found:  USB Debugger A/0/\([0-9]*\)/.*#\1#p' | head -1)
+  # SRAM erase; it can hang too (seen after the board was power-cycled), so bound it
+  timeout -s KILL 30 ./programmer_cli --device GW1NR-9C --run 24 --cable-index 4 \
+      --location "${LOC:-0}" > /dev/null 2>&1 || echo "attempt $attempt: SRAM erase failed or hung"
   ./programmer_cli --device GW1NR-9C --run 38 --mcuFile "$IMG/flash.bin" --spiaddr 0x000000 \
       --cable-index 4 --location "${LOC:-0}" > "$LOG" 2>&1 &
   PID=$!
@@ -58,8 +72,11 @@ for attempt in 1 2 3; do
     if tr '\r' '\n' < "$LOG" | grep -a '%' | tail -1 | grep -qE 'Erasing sector at 0\.\.\.: \[ *\] 0%'; then
       stall=$((stall + 5))
       if [[ $stall -ge 60 ]]; then
-        kill "$PID"
         echo "attempt $attempt: GAO bridge stuck at the first sector erase, retrying"
+        # stuck there, programmer_cli ignores SIGTERM; and under set -e a kill of a process
+        # that is already gone would end the script
+        kill -9 "$PID" 2>/dev/null || true
+        break
       fi
     fi
   done

@@ -4,14 +4,15 @@
 #   fpga/build.sh          write fpga/build/, then synthesis + place-and-route
 #   fpga/build.sh prep     only write fpga/build/ (do this before opening the project in the IDE)
 #
-# fpga/build/ holds the boot ROM hex and tang9k_cfg.v (TANG9K_CPU_HZ, TANG9K_UART_BAUD,
-# TANG9K_BOOTROM_FILE),
+# fpga/build/ holds the boot ROM hex, tang9k_cfg.v (TANG9K_CPU_HZ, TANG9K_UART_BAUD,
+# TANG9K_BOOTROM_FILE, TANG9K_VIDEO) and tang9k_soc.sdc (from fpga/src, + video clocks),
 # the first file of fpga/tang9k_soc.gprj. The PSRAM IP and rPLL under fpga/src/ are
 # described in fpga/src/tang9k_top.v and gowin_rpll.v.
 #
 # Env: CPU_HZ (default 42000000: the IP's clk_out at memory_clk 84 MHz), BAUD (default
 #      1000000; the UART divider is CPU_HZ / BAUD, fixed in hardware), SMODE (default 0; 1 =
-#      the stage-2 CPU with S-mode + SV32 MMU, which also runs the stage-1 kernel), STAGE (syn|pnr|all),
+#      the stage-2 CPU with S-mode + SV32 MMU, which also runs the stage-1 kernel), VIDEO
+#      (default 0; 1 = HDMI framebuffer scanout, doc/video_plan.md), STAGE (syn|pnr|all),
 #      GOWIN_PATH (default /mnt/data/Gowin_V1.9.12.02_SP2_linux).
 set -euo pipefail
 
@@ -21,6 +22,7 @@ B="$HERE/build"
 CPU_HZ="${CPU_HZ:-42000000}"
 BAUD="${BAUD:-1000000}"
 SMODE="${SMODE:-0}"
+VIDEO="${VIDEO:-0}"
 
 mkdir -p "$B"
 "$REPO/sw/bootrom/build.sh" "$B/bootrom.hex"
@@ -30,7 +32,31 @@ cat > "$B/tang9k_cfg.v" <<EOF
 \`define TANG9K_UART_BAUD $BAUD
 \`define TANG9K_SMODE $SMODE
 \`define TANG9K_BOOTROM_FILE "$B/bootrom.hex"
+\`define TANG9K_FONT_FILE "$REPO/rtl/video/font8x16.hex"
 EOF
+# Constraints: one file (Gowin reads each SDC file on its own), fpga/src/tang9k_soc.sdc plus
+# the video clocks when VIDEO=1 (their nets only exist with video). The define switches the
+# board top's video clocks and PHY.
+# SDC_MEM_MULT (default 28) over-constrains the clocks for the placer only: 30 makes the
+# analysis target memory_clk 90 / CPU 45 MHz while the rPLL still makes 84 / 42. The
+# report's Fmax is the real figure either way.
+sed "s/-multiply_by 28 -divide_by 9/-multiply_by ${SDC_MEM_MULT:-28} -divide_by 9/" \
+  "$HERE/src/tang9k_soc.sdc" > "$B/tang9k_soc.sdc"
+grep -q -- "-multiply_by ${SDC_MEM_MULT:-28} -divide_by 9" "$B/tang9k_soc.sdc"
+if [[ "$VIDEO" == 1 ]]; then
+  echo '`define TANG9K_VIDEO' >> "$B/tang9k_cfg.v"
+  cat >> "$B/tang9k_soc.sdc" <<'SDC'
+
+// Added by fpga/build.sh (VIDEO=1): 27 MHz * 14 / 3 = 126 MHz TMDS clock, / 5 = 25.2 MHz
+// pixel clock (fpga/src/gowin_rpll/gowin_rpll_video.v). The pixel and CPU domains meet only
+// through toggle handshakes and the dual-clock line buffer (rtl/video/video_ctrl.v).
+create_generated_clock -name hdmi_fclk -source [get_ports {clk_27m}] -master_clock clk27 -multiply_by 14 -divide_by 3 [get_nets {hdmi_fclk}]
+create_generated_clock -name pix_clk -source [get_nets {hdmi_fclk}] -master_clock hdmi_fclk -divide_by 5 [get_pins {hdmi_div/CLKOUT}]
+set_clock_groups -asynchronous -group [get_clocks {pix_clk}] -group [get_clocks {cpu_clk}]
+set_clock_groups -asynchronous -group [get_clocks {hdmi_fclk}] -group [get_clocks {cpu_clk}]
+set_clock_groups -asynchronous -group [get_clocks {clk27}] -group [get_clocks {pix_clk}]
+SDC
+fi
 [[ "${1:-}" == prep ]] && exit 0
 
 for ip in psram_memory_interface_hs_2ch gowin_rpll; do
@@ -41,6 +67,8 @@ export GOWIN_PATH="${GOWIN_PATH:-/mnt/data/Gowin_V1.9.12.02_SP2_linux}"
 export GPRJ="$HERE/tang9k_soc.gprj" TOP=tang9k_top STAGE="${STAGE:-all}"
 # Free the dual-purpose config pins for user IO (the flash pins 59-62 may be among them;
 # the ov7670 project sets SSPI the same way).
-export GW_OPTIONS="-use_mspi_as_gpio 1 -use_sspi_as_gpio 1"
+# GW_EXTRA: more "-name value" pairs (e.g. "-replicate_resources 1"); PLACE_OPTION and
+# ROUTE_OPTION go to scripts/gw_run.tcl
+export GW_OPTIONS="-use_mspi_as_gpio 1 -use_sspi_as_gpio 1 ${GW_EXTRA:-}"
 rm -rf "$HERE/impl/gwsynthesis" "$HERE/impl/pnr"
 "$REPO/scripts/gw_run.sh"

@@ -1,0 +1,13 @@
+# MMU image only (doc/video_plan.md): `script` mirrors the console shell onto the HDMI
+# text console (rootfs-overlay/usr/bin/console-shell). Needs a pty, so devpts.
+CONFIG_SCRIPT=y
+# I2C tools on /dev/i2c-0 and mkfs.vfat for the microSD card (doc/peripherals.md)
+CONFIG_I2CGET=y
+CONFIG_I2CSET=y
+CONFIG_I2CDUMP=y
+CONFIG_I2CDETECT=y
+CONFIG_I2CTRANSFER=y
+CONFIG_MKDOSFS=y
+CONFIG_MKFS_VFAT=y
+# devmem: the SoC's registers from the shell (/dev/mem, MMIO only)
+CONFIG_DEVMEM=y

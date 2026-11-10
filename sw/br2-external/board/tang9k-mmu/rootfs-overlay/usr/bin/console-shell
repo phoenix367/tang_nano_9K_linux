@@ -1,0 +1,14 @@
+#!/bin/sh
+# The console shell (inittab). With an HDMI console on tty1 (doc/video_plan.md: the hardware
+# text mode, qervcon), busybox script runs the shell in a pty and copies everything it shows
+# to tty1: the screen shows the UART session (the board has no keyboard). The first visible
+# character there switches the screen from the boot ROM's splash to text mode, so the splash
+# stays up until the shell starts. Without one (only the dummy console), a plain login shell.
+if [ -c /dev/tty1 ] && grep -qv dummy /sys/class/vtconsole/vtcon*/name 2>/dev/null; then
+    # From here on, info-level kernel messages stay in dmesg only (warnings and errors still
+    # reach the serial console), so none land after the first prompt.
+    echo 5 > /proc/sys/kernel/printk
+    printf '\033[H\033[J' > /dev/tty1           # clear the screen (blanks: splash stays)
+    exec script -q -c "sh -l" /dev/tty1
+fi
+exec sh -l
