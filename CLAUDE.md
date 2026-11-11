@@ -575,8 +575,17 @@ if it exists.
   8 KB/s and saves the output to `perf/board/results/`. It touches neither flash.
   - **CPU:** each instruction class costs the simulation's cycles plus 1 on the board (+2 for
     loads and stores): ALU 13, branches and shifts 21, loads and stores 24, div 56.
-  - **Tick:** the 100 Hz tick takes 37% of a busy CPU: 3.7 ms (154K cycles) and ~690 cache
-    misses per tick, enough to flush the 16 KB cache.
+  - **Tick and SD poll:** a busy loop loses 35–45% of the CPU.
+    - The tick takes ~25%: ~107K cycles, 4,500 instructions and ~500 misses per tick
+      (sim profile and board agree).
+      - Scheduler/PELT 32%, timekeeping 30% (5 `memcpy` of timekeeper structs per tick),
+        IRQ dispatch 8%, 64-bit libgcc shifts 5% (the kernel is `-Os`), the SBI shim 1%.
+    - The rest, 10–20%, is the MMC core polling the empty microSD slot every second.
+      `of_mmc_spi.c` sets `MMC_CAP_NEEDS_POLL` without a card-detect IRQ and ignores
+      `non-removable`.
+      - Unbinding the driver (`echo spi0.0 > /sys/bus/spi/drivers/mmc_spi/unbind`) took the
+        loss from 35–45% to ~25%.
+    - `doc/performance.md` has the breakdown and the sim recipe.
   - **Memory:** a load costs 26.5 cycles in the cache and 55.7 from PSRAM. The knee is at
     16 KB, and the data TLB reaches 512 KB. Streaming is CPU-bound: 3.7 MB/s of loads from
     PSRAM. uClibc's memcpy manages 1.3–1.7 MB/s.

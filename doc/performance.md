@@ -18,9 +18,11 @@ faults. The timer tick's share of the CPU is measured too.
 - **CPU:** every instruction costs the simulation's cycles plus 1, or plus 2 for a load or a
   store. That is 13 cycles for an ALU op, 21 for a branch or shift, 24 for a load, store or
   multiply, 56 for a divide: about 2 million instructions per second in ordinary code.
-- **The timer tick takes 37% of a busy CPU.** Each 100 Hz tick costs 3.7 ms (154K cycles) and
-  ~690 cache misses, more than the cache's 512 lines, so it also evicts the running program's
-  working set. On average a program gets 0.5–0.75 of its best-case speed.
+- **The timer tick and an SD-card poll take 35–45% of a busy CPU.**
+  - The tick takes ~25%: each 100 Hz tick runs ~4,500 kernel instructions (~107K cycles,
+    ~500 cache misses), and evicts most of the running program's working set.
+  - Polling the empty microSD slot, once a second, takes another 10–20%.
+  - On average a program gets 0.5–0.75 of its best-case speed.
 - **Memory:** a dependent load costs ~26.5 cycles in the cache and ~55.7 from PSRAM.
   - The step comes exactly at 16 KB, the cache size.
   - The data TLB covers 512 KB; beyond that page walks add ~7 cycles.
@@ -72,23 +74,76 @@ C workloads:
 | CRC32, table-driven, 1 KB of data | 235 KB/s | 116–118 KB/s |
 | `qsort` of 2048 ints (libc) | | 1.02–1.03 s |
 
-## The timer tick
+## The timer tick and the SD-card poll
 
-A busy loop timed in 0.5 ms chunks for 2 s:
+What a busy loop loses on the board (`os.tick`: 0.5 ms chunks for 2 s):
 
-| | Run 1 | Run 2 |
-| --- | --- | --- |
-| Share of the time the loop loses | 35.9% | 36.7% |
-| Cost per tick | 3.59 ms (151K cycles) | 3.67 ms (154K cycles) |
-| Cache misses / write-backs per tick | 671 / 77 | 688 / 79 |
+| | Share of the time lost | Cycles per tick period | Cache misses per tick |
+| --- | --- | --- | --- |
+| As booted (4 runs) | 35–45% | 147K–189K | 667–834 |
+| `mmc_spi` unbound (2 runs) | 24.6–26.8% | 103K–112K | 483–515 |
 
-- **The tick flushes the cache.** Each tick misses more lines than the cache holds, so a
-  program finds its working set gone after every tick and has to refill it. That's why
-  CRC32 averages 0.49 of its best (2.04× slower), more than the tick's own 37% would explain.
+Two things take that time.
+
+- **The SD-card poll, 10–20%.**
+  - The slot has no card-detect line, and `of_mmc_spi.c` then sets `MMC_CAP_NEEDS_POLL`.
+    It doesn't read the `non-removable` property.
+  - So the MMC core rescans the slot every second. In an empty slot, each rescan tries a
+    full card initialization at up to four clock rates over SPI.
+  - The CPU waits on every SPI byte. The SPI core also updates a dozen 64-bit statistics per
+    transfer, each guarded by a seqcount on a 32-bit kernel.
+  - The cost varies with the retries. The slot has been empty on recent boots.
+- **The tick itself, ~25%:** 103–112K cycles, about 4,500 instructions.
+
+Where the tick's cycles go comes from a simulation profile: 369 ticks under a busy loop, with
+the SD poll and the loop's own system calls taken out (recipe below). It gives 107K cycles
+per tick, matching the board.
+
+| Part | Cycles per tick | Instructions | Share | Biggest pieces (cycles per tick) |
+| --- | --- | --- | --- | --- |
+| Scheduler tick and PELT load tracking | 34.3K | 1,481 | 32% | `decay_load` 5.8K (11 calls), `__update_load_avg_se` 4.2K, `__update_load_avg_cfs_rq` 3.6K, `update_curr` 2.8K, `update_rq_clock` 2.4K |
+| Timekeeping | 31.9K | 1,372 | 30% | `memcpy` 11.0K (5 calls), `__timekeeping_advance` 7.3K, `timekeeping_update_from_shadow` 2.6K, `timekeeping_cycles_to_ns` 1.9K |
+| IRQ dispatch | 8.6K | 312 | 8% | `__radix_tree_lookup` 1.4K: the RISC-V intc registers a tree IRQ domain |
+| Timers, hrtimers, softirq | 6.2K | 251 | 6% | `__hrtimer_run_queues` 1.2K, `run_posix_cpu_timers` 1.1K |
+| Timer interrupt and rearming it | 5.7K | 232 | 5% | `clockevents_program_event` 1.7K, `get_cycles64` 1.2K |
+| 64-bit shifts in libgcc | 5.4K | 268 | 5% | `__lshrdi3` 2.5K, `__ashldi3` 2.5K |
+| Trap entry and exit | 4.6K | 185 | 4% | `handle_exception` 1.6K, `ret_from_exception` 1.0K |
+| CPU time accounting | 2.5K | 96 | 2% | |
+| SBI shim in the boot ROM | 1.3K | 73 | 1% | the M-mode timer interrupt handed to S, then `set_timer` |
+| Other: run-queue lock, EEVDF pick, RCU | 6.9K | 272 | 7% | |
+| **Total** | **107K** | **4,544** | | 23.6 cycles per instruction |
+
+- **The path is ordinary Linux code.**
+  - About 4,500 instructions is what a tick costs on a 32-bit CPU. On this one, at ~24 cycles
+    each, it takes 2.6 ms, a quarter of the 10 ms period. A 100-MIPS core would spend 0.4%.
+  - The SBI round trip through the boot ROM, an early suspect, is 1%.
+- **64-bit arithmetic on a 32-bit CPU inflates it:**
+  - PELT decays its sums with 64-bit fixed-point multiplies, 11 times per tick.
+  - Every tick copies the whole `struct timekeeper` out of its shadow copy. It also updates
+    two latched fast timekeepers, each with two copies of `tk_read_base`: 5 `memcpy`
+    calls, 11K cycles. The source notes the first copy "could be avoided by switching
+    pointers".
+  - Variable 64-bit shifts are libgcc calls because the kernel is built with `-Os`
+    (`CONFIG_CC_OPTIMIZE_FOR_SIZE`). That also leaves one-line helpers out of line.
+- **The tick flushes the cache.**
+  - Its ~500 misses mean its code and data take about as much as the whole 16 KB cache.
+  - A program finds its working set gone after every tick and has to refill it. That's why
+    CRC32 averages 0.49 of its best (2.04× slower), more than the time lost alone would
+    explain.
 - **It runs when idle too:** the kernel is built with `CONFIG_HZ_PERIODIC`.
-- **What a tick does:** the boot profile in `sim/soc/profile.py` already had the tick at
-  about 25% of boot cycles: PELT load tracking, timekeeping, 64-bit arithmetic, and the
-  round trip through the boot ROM's SBI shim to rearm the timer.
+
+The profile:
+
+```
+CONFIG=mmu VIDEO=1 PC_PROF=1 PROF_FROM='; done' INPUT='while :; do :; done\n' \
+  MAX_CYCLES=1100000000 sim/soc/run.sh               # ~14 min; the prompt at 900M cycles
+python3 sim/soc/profile.py $WORK/soc_w4-mmu-video.pcprof <linux>/System.map --mmu
+```
+
+- The per-PC fetch counts also give call counts: the fetches of a function's first
+  instruction.
+- hush's `while :; do :; done` isn't pure user code: it calls `waitid()` on every iteration,
+  ~420 times a second. Those calls are taken out above.
 
 ## Kernel paths
 
@@ -197,13 +252,16 @@ and not reproduced on purpose.
 
 ## What it points at
 
-1. **The tick is the largest lever.** Halving its rate would give back about a sixth of the
-   CPU (its share 37% → ~18%), and more once the cache refills after each tick are counted.
-   - 100 Hz is the lowest choice in `kernel/Kconfig.hz`, so a lower rate needs a small patch
-     there.
-   - Making each tick cheaper needs a profile first (`CONFIG_PROFILING` and `profile=`, as
-     for the SD card in `doc/peripherals.md`). PELT, the SBI round trip and the 64-bit
-     timekeeping math are the suspects.
+1. **The SD poll and the tick are the largest levers.**
+   - **Stop polling the empty slot, 10–20% of the CPU.** A small kernel patch could make
+     `of_mmc_spi.c` honour `non-removable`, so the card is scanned once at boot; the cost is
+     SD hot-plug. Unbinding the driver at runtime does the same:
+     `echo spi0.0 > /sys/bus/spi/drivers/mmc_spi/unbind`.
+   - **Tick less often.** At 50 Hz the tick's ~25% would halve. 100 Hz is the lowest choice
+     in `kernel/Kconfig.hz`, so a lower rate needs a small patch there.
+   - **Make each tick cheaper.** Building with `-O2` instead of `-Os` would inline the 64-bit
+     shifts and the small helpers, but a larger kernel costs RAM. The timekeeper copies and
+     PELT are generic kernel code.
 2. **An assembly `memcpy` and `memset` for uClibc on RV32** (8 loads, then 8 stores per line)
    should about double `memcpy`.
 3. **fork, exec and page faults** cost 0.08–0.2 s each; every non-builtin shell command pays
