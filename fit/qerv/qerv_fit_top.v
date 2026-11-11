@@ -1,6 +1,6 @@
 // Fit/utilization probe for SERV (W=1) / QERV (W=4) with the MDU (M extension) and CSRs on
 // the Tang Nano 9K. serv_rf_top includes the register-file RAM (GPRs + 4 CSRs).
-// Same scheme as the KianV probes: LFSR-driven inputs, XOR-folded outputs on one LED pin.
+// Same scheme as every fit probe: LFSR-driven inputs, XOR-folded outputs on one LED pin.
 // Probe overhead: 64-bit LFSR (~64 FF, a few LUTs) + ~105-input XOR tree (~35 LUT4, 1 FF).
 `default_nettype none
 

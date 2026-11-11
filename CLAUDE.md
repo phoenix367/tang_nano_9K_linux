@@ -166,10 +166,8 @@ if it exists.
     a summary row. `python3 fit/summarize.py fit/*/results/*` reprints all rows.
   - **Build options:** each probe's options live in a generated `<x>_cfg.v` listed first in its
     `.gprj`, and GowinSyn carries those macros into the later files. Probes with variants have
-    a `run_fit.sh` that rewrites the cfg and sets the label:
-    - `fit/kianv_sv32/run_fit.sh [ITLB] [DTLB]`: ITLB is 4-way and DTLB 8-way, so entries
-      must be multiples of that.
-    - `fit/qerv/run_fit.sh [1|4]`: SERV width.
+    a `run_fit.sh` that rewrites the cfg and sets the label, e.g. `fit/qerv/run_fit.sh [1|4]`
+    (SERV width).
   - **Constraints:** pins and the 50 MHz analysis clock are shared in `fit/common/`.
 - **Linux image (M0):** `sw/build.sh [buildroot-target]` builds the stage-1 software.
   - **Inputs:** Buildroot is pinned to 2026.08.1 and checked out in
@@ -192,7 +190,8 @@ if it exists.
   was absorbed into its parent, not deleted. The hardware-proven ov7670 build shows it for
   `servile_mux`.
 - The installed yosys (0.33) does not map `*` to Gowin DSPs, so its `synth_gowin` numbers
-  for KianV are wildly inflated. Use GowinSyn for any utilization figure.
+  for a core with a multiplier (KianV was one) are wildly inflated. Use GowinSyn for any
+  utilization figure.
 - **QERV SoC (M2):** `rtl/soc/soc_top.v` contains:
   - qerv_cpu → servile_arbiter → an address decoder (memory map in `doc/stage1_plan.md`, the
     same as the emulator; `0x9000_0000` is the uncached alias of the PSRAM)
@@ -456,6 +455,8 @@ if it exists.
 ## Fit results (GowinSyn 1.9.12.02 SP2, 2026-11-10, core only, no caches/peripherals)
 
 Multipliers use one DSP `MULT36X36` in every row. "Logic" counts each RAM16 as 6 LUTs.
+The KianV rows came from probes of splinedrive/kianRiscV at da994e6. Those probes and the
+submodule were removed on 2026-11-11, since nothing else used them; git history has them.
 
 | Core | Logic (of 8,640) | CLS | FF | BSRAM | Fmax |
 | --- | --- | --- | --- | --- | --- |
@@ -585,10 +586,10 @@ fixed under `LINUX=1`.
 
 ## Prior art for Linux at this memory size (checked 2026-11)
 
-- **KianV**: vendored as the git submodule `external/kianRiscV` (splinedrive/kianRiscV). Run
-  `git submodule update --init` after cloning. Its RV32IMA SoCs boot Linux, and the Tiny Tapeout
-  edition does it with **8 MiB of PSRAM** at ~30 MHz, the closest match to this board's memory
-  budget. Several directories under `linux_socs/` are symlinks to the same two trees:
+- **KianV** (splinedrive/kianRiscV; the paths below are in that repo, as of da994e6). Its
+  RV32IMA SoCs boot Linux, and the Tiny Tapeout edition does it with **8 MiB of PSRAM** at
+  ~30 MHz, the closest match to this board's memory budget. Several directories under
+  `linux_socs/` are symlinks to the same two trees:
   - `kianv_harris_mcycle_edition/` (= `uLinuxSoC`, `linux_nommu_...`): **no-MMU** multicycle
     core with no cache. RTL targets ULX3S / iCESugar-Pro. Its Tang Nano 20K port (8 MB SDRAM)
     is **binary-only** (`demo/tangNano20K/`), so there is no Gowin RTL to start from.
@@ -599,8 +600,8 @@ fixed under `LINUX=1`.
     splinedrive/kianv-rv32-linuxcore.
 
   All variants talk to SDRAM or QSPI PSRAM, so porting means replacing the memory controller
-  with the Gowin PSRAM IP and adding a `.cst` and top level for the 9K. Don't edit the
-  submodule in place; keep 9K-specific RTL in this repo.
+  with the Gowin PSRAM IP and adding a `.cst` and top level for the 9K. The project chose
+  SERV instead (see Fit results).
 - **linux-on-litex-vexriscv**: VexRiscv with MMU on LiteX. It needs 32 MB, or 8 MB when the
   rootfs is on SD. It supports the Tang Nano 20K, not the 9K. litex-boards has a
   `sipeed_tang_nano_9k` target, but its HyperRAM support is not mainline-clean.

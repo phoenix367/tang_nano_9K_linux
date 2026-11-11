@@ -172,7 +172,7 @@ that.
 | `sw/tools/` | Board tools: `qerv_boot.py`, `flash_linux.sh`, `console.sh`, `mksplash.py` |
 | `sim/soc/` | Whole-SoC Verilator simulation and profiling |
 | `verif/` | Unit tests |
-| `fit/` | Fit probes that compared candidate CPU cores on this FPGA |
+| `fit/` | Fit probes: one CPU core alone on this FPGA, for its size and Fmax |
 | `perf/` | Boot-time model: CPI measurement and emulator traces |
 | `doc/` | Plans and results |
 | `external/` | Submodules |

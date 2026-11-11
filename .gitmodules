@@ -1,6 +1,3 @@
-[submodule "external/kianRiscV"]
-	path = external/kianRiscV
-	url = https://github.com/splinedrive/kianRiscV.git
 [submodule "external/serv"]
 	path = external/serv
 	url = https://github.com/phoenix367/sparrow-serv.git
