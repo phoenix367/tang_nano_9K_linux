@@ -2,10 +2,15 @@
 
 [![CI](https://github.com/phoenix367/tang_nano_9K_linux/actions/workflows/ci.yml/badge.svg)](https://github.com/phoenix367/tang_nano_9K_linux/actions/workflows/ci.yml)
 
-A RISC-V Linux system on the Sipeed Tang Nano 9K. A bit-serial soft CPU runs in the board's
-GW1NR-9 FPGA and uses the 8 MB PSRAM in the FPGA package as main memory. On it, a mainline
-Linux kernel with SV32 virtual memory boots to a BusyBox shell. The HDMI output shows a boot
-splash, then a text console that mirrors the serial shell.
+This is an experimental project. I wanted to find out whether a board as small as the Sipeed
+Tang Nano 9K can run Linux at all: its GW1NR-9 FPGA has 8,640 LUTs and 8 MB of PSRAM in the
+package. It can.
+- A bit-serial RISC-V soft CPU runs in the FPGA, with the PSRAM as main memory.
+- A mainline Linux kernel with SV32 virtual memory boots on it to a BusyBox shell. It's slow:
+  the CPU runs about 2 million instructions per second.
+- The HDMI output shows a boot splash, then a text console that mirrors the serial shell.
+
+![The serial console at power-up: the end of the kernel's boot log, then the shell's greeting](doc/images/serial_boot.png)
 
 ## What runs
 
