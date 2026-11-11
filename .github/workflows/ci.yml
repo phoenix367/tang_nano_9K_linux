@@ -1,0 +1,57 @@
+# Simulation and test checks that need no FPGA tools, no board and no Buildroot build.
+# Each job runs one group of scripts/ci.sh, which runs the same way on a workstation.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.group }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # cpu: directed tests vs iss.py, riscv-tests (stage 1 and 2), cycle costs
+        # units: cache, PSRAM model, UART, I2C, SPI, video under load
+        # soc: the Verilator SoC model (boot ROM commands, bare-metal cbo_test)
+        group: [cpu, units, soc]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # external/sparrow-serv (the CPU core), external/mdu, external/riscv-tests and
+          # its env submodule
+          submodules: recursive
+
+      - name: Install simulators and the RISC-V GCC
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            iverilog verilator gcc-riscv64-unknown-elf
+          iverilog -V 2>&1 | head -1
+          verilator --version
+          riscv64-unknown-elf-gcc --version | head -1
+
+      - name: scripts/ci.sh ${{ matrix.group }}
+        env:
+          RISCV_PREFIX: riscv64-unknown-elf-
+          WORK: ${{ runner.temp }}/work
+        run: scripts/ci.sh ${{ matrix.group }}
+
+      - name: Keep the logs of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.group }}
+          path: |
+            sim/soc/results/
+            verif/*/build/*.log
+            ${{ runner.temp }}/work/*.log
+          if-no-files-found: ignore

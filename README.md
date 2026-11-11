@@ -1,5 +1,7 @@
 # Linux on a Tang Nano 9K
 
+[![CI](https://github.com/phoenix367/tang_nano_9K_linux/actions/workflows/ci.yml/badge.svg)](https://github.com/phoenix367/tang_nano_9K_linux/actions/workflows/ci.yml)
+
 A RISC-V Linux system on the Sipeed Tang Nano 9K. A bit-serial soft CPU runs in the board's
 GW1NR-9 FPGA and uses the 8 MB PSRAM in the FPGA package as main memory. On it, a mainline
 Linux kernel with SV32 virtual memory boots to a BusyBox shell. The HDMI output shows a boot
@@ -140,6 +142,10 @@ the baud rate of the previous open of the port; the script and `qerv_boot.py` wo
 that.
 
 ## Simulation and tests
+
+`scripts/ci.sh [cpu|units|soc|all]` runs every check that needs neither the Gowin tools nor
+the board nor a kernel build. GitHub Actions runs it on every push
+(`.github/workflows/ci.yml`). The pieces:
 
 - `sim/soc/run.sh`: Verilator simulation of the whole SoC, booting the real kernel
   (`CONFIG=mmu` for the MMU kernel). It runs at about 2.4 MHz, so a boot to the shell takes

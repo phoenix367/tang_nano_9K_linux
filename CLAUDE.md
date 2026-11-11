@@ -103,6 +103,12 @@ if it exists.
     `ROM_INPUT=<records>` overrides that (`sim_main.cpp` `+rom_input`: records of
     {u32 length, bytes}, one per `> ` prompt). `sim/soc/test_bootrom.py` (~1 min) checks
     every command.
+- **CI:** `scripts/ci.sh cpu|units|soc|all` runs the checks that need no Gowin tools, board
+  or kernel: the CPU tests and riscv-tests, the CPI check, the unit benches (not
+  `verif/video/run.sh`, which needs Gowin's primitive models), and the SoC model (boot ROM
+  commands, `cbo_test`). `.github/workflows/ci.yml` runs the three groups on ubuntu-24.04
+  with the packaged `gcc-riscv64-unknown-elf`, Icarus and Verilator. Locally:
+  `RISCV_PREFIX=riscv64-unknown-elf- scripts/ci.sh all`. A new test script belongs in it.
 - **Board access:** the Tang Nano 9K shows up as FT2232 `0403:6010`.
   - `openFPGALoader -b tangnano9k --detect` sees the GW1N(R)-9C.
   - `--external-flash --dump-flash --file-size N out.bin` reads the external flash. Note
