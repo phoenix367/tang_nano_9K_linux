@@ -12,7 +12,8 @@ the board, with real fork and pipelines; `doc/stage2_plan.md` has the plan and s
 board autoboots the MMU kernel from its flashes: `~ #` 17 s after the boot ROM prompt at
 42 MHz (12 s after a UART-loaded `B`). The stage-1 milestones (M0 software image in the emulator →
 M1 core → M2 SoC sim → M3 fit → M4 board), memory map and open decisions are in
-`doc/stage1_plan.md`. HDMI video works on the board too: a 640×480 RGB565 framebuffer in
+`doc/stage1_plan.md`. `doc/01-architecture.md` describes the hardware as a whole
+(clocks, reset, memory, address map, timing, resources); keep it in step with changes. HDMI video works on the board too: a 640×480 RGB565 framebuffer in
 PSRAM, scanned out over HDMI, with a boot splash from the ROM and, in the MMU kernel,
 `/dev/fb0` plus an 80×30 hardware text console mirroring the UART shell
 (`doc/video_plan.md`: plan, status, results). The MMU kernel also has an I2C bus (the
@@ -68,8 +69,10 @@ if it exists.
     Sipeed schematic names pin 4 S2, but this board's S1/S2 silkscreen is swapped (checked by
     pressing). It is synchronized and debounced (2.4 ms) in the
     27 MHz domain, with a ~10 ms power-on reset. It resets the PSRAM IP (which recalibrates;
-    RAM contents are not kept), cache, TLB, CPU and peripherals, so the boot ROM starts over. LEDs: heartbeat,
-    PLL lock, PSRAM calibrated, UART TX, reset, poweroff.
+    RAM contents are not kept), the cache's FSM, the TLB, the CPU and peripherals, so the
+    boot ROM starts over. The cache's tag RAM is not reset (only the bitstream initializes
+    it), so lines cached before a reset stay valid. LEDs: heartbeat, PLL lock, PSRAM
+    calibrated, UART TX, reset, poweroff.
   - **SYSCON status words** (read at 0x1110_0000 + 4·i, layout in `soc_top.v`): calib bits,
     PSRAM commands and read beats per channel, cache misses and write-backs. Words 8–13 are
     the video registers CTRL/BASE/STATUS/YOFF/TSTART/CURSOR (writable; `video_ctrl.v`).
@@ -433,7 +436,9 @@ if it exists.
     the riscv-tests.
   - Link test programs with `-Wl,--build-id=none`. Otherwise the build-id note lands at
     `0x80000000`, SERV executes it, and it hangs (no illegal-instruction trap).
-  - `fit/qerv_linux/run_fit.sh [4|1]` is the fit probe for qerv_cpu.
+  - `fit/qerv_linux/run_fit.sh [4|1]` is the fit probe for qerv_cpu. When qerv_cpu gets a new
+    output, fold it into `fit/qerv_linux/qerv_linux_fit_top.v` too: an unused output lets
+    synthesis prune its logic, and the probe then reports too little, with no error.
 - **Boot-time model** (`perf/`), three pieces:
   - `perf/serv_cpi/run.sh` (~90 s) measures cycles per instruction class on SERV/QERV + MDU
     in Icarus. It checks the RTL against a Python ISS (`iss.py`) and writes
@@ -621,7 +626,15 @@ fixed under `LINUX=1`.
   `github.com/phoenix367/sparrow-serv` (its README describes the changes). In the submodule,
   `origin` is the fork (fetch over HTTPS, push over SSH) and `upstream` is olofk/serv. A
   change there is committed and pushed in the fork first, then the new submodule pointer is
-  committed here. It adds `parameter LINUX`, and `LINUX=0` is
+  committed here.
+  - **The fork's CI** (GitHub Actions) keeps upstream's jobs: RISCOF compliance on servant,
+    the Verilator lint, riscv-formal and OpenLANE. Two things break it:
+    - A new `serv_top` port must also be connected in `servile/servile.v` and
+      `rtl/serv_synth_wrapper.v` (inputs tied off). Verilator's PINMISSING is fatal there.
+    - `data/verilator_waiver.vlt` waives by line number. An edit above a waived line in
+      `serv_top.v`, `serv_decode.v`, `serv_csr.v` or `serv_rf_if.v` must update the waiver.
+    - Check locally with FuseSoC: `fusesoc run --target=lint serv --W=1` (and `--W=4`),
+      `--target=lint servant --width=1|4`, `--target=lint serving`. It adds `parameter LINUX`, and `LINUX=0` is
   cycle-identical to upstream (`perf/serv_cpi` results unchanged). `LINUX=1` adds:
   - A: one dbus transaction with `o_dbus_amo`/`o_dbus_amo_op`, executed by `amo_unit`.
   - U-mode, with mstatus MPP (00/11) and MPIE readable and writable.

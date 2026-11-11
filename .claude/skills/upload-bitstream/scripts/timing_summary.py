@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Summarize a Gowin PnR run: which bitstream, Fmax per clock against its constraint, total
-negative slack, the worst setup paths and the resource use.
+negative slack, the worst setup paths, hold violations and the resource use.
 
   python3 .claude/skills/upload-bitstream/scripts/timing_summary.py [PNR_DIR]
 
@@ -44,13 +44,34 @@ if neg:
     for c, k, v, n in neg:
         print(f"  {c} {k}: TNS {v} over {n} endpoints")
 else:
-    print("\nTNS 0 on every clock (setup and hold)")
+    print("\nTNS 0 on every clock (the summary table)")
 
-paths = re.findall(r"Path(\d+) Path Summary: Slack (-?[\d.]+) .*? From (\S+) To (\S+)", t)
+def section(name, end):
+    i = t.find(name)
+    return t[i:t.find(end, i)] if i >= 0 else ""
+
+PATH = r"Path(\d+) Path Summary: Slack (-?[\d.]+) .*? From (\S+) To (\S+)"
+paths = re.findall(PATH, section("Setup Analysis Report", "Hold Analysis Report"))
 if paths:
     print("\nworst setup paths (slack ns, from -> to):")
     for n, sl, a, b in paths[:4]:
         print(f"  {sl:>7s}  {a} -> {b}")
+
+# The TNS table above can read 0 for hold while the hold path list has negative slacks (the
+# PSRAM IP's calibration flag into its input deserializers, a known IP-internal class that
+# user constraints cannot clear). List them; any outside the IP is a real failure.
+hold = [(float(sl), a, b) for n, sl, a, b in
+        re.findall(PATH, section("Hold Analysis Report", "Recovery Analysis Report"))
+        if float(sl) < 0]
+if hold:
+    ip = [h for h in hold if h[1].startswith("psram/") and h[2].startswith("psram/")]
+    other = [h for h in hold if h not in ip]
+    print(f"\nnegative hold slack on {len(hold)} of the listed paths (worst {min(hold)[0]:.3f} ns):")
+    if ip:
+        print(f"  {len(ip)} inside the PSRAM IP (known, IP-internal; accepted)")
+    for sl, a, b in other:
+        print(f"  {sl:7.3f}  {a} -> {b}  OUTSIDE THE IP")
+    bad |= bool(other)
 
 if os.path.exists(rpt):
     print("\nresources:")

@@ -174,12 +174,17 @@ that.
 | `verif/` | Unit tests |
 | `fit/` | Fit probes: one CPU core alone on this FPGA, for its size and Fmax |
 | `perf/` | Boot-time model: CPI measurement and emulator traces |
-| `doc/` | Plans and results |
+| `doc/` | Architecture, plans and results (`doc/README.md` is the map) |
 | `external/` | Submodules |
 | `.claude/skills/` | Claude Code skills for loading kernels and bitstreams |
 
 ## Documentation
 
+`doc/README.md` is the document map. The main documents:
+
+- [`doc/01-architecture.md`](doc/01-architecture.md): the hardware architecture: block
+  diagram, clocks and reset, memory and arbitration, interfaces, verification, timing and
+  resources, open issues.
 - `doc/stage1_plan.md`: the no-MMU stage, milestones M0–M4, and the design decisions.
 - `doc/stage2_plan.md`: the MMU stage.
 - `doc/video_plan.md`: HDMI video and the text console.
