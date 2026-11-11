@@ -99,7 +99,8 @@ module soc_top #(
   // ---------------------------------------------------------------- CPU
   wire [31:0] ibus_adr, ibus_rdt, dbus_adr, dbus_dat, dbus_rdt;
   wire [ 3:0] dbus_sel;
-  wire        ibus_cyc, ibus_ack, dbus_we, dbus_cyc, dbus_ack;
+  wire        ibus_cyc, ibus_ack, dbus_we, dbus_cyc, dbus_ack, dbus_cmo;
+  wire [ 1:0] dbus_cmo_op;
   wire        mtip;
   wire        seip, uart_irq;              // PLIC context 0 -> the hart's SEIP
   wire [63:0] mtime;
@@ -119,6 +120,8 @@ module soc_top #(
       .o_dbus_sel (dbus_sel),
       .o_dbus_we  (dbus_we),
       .o_dbus_cyc (dbus_cyc),
+      .o_dbus_cmo (dbus_cmo),
+      .o_dbus_cmo_op(dbus_cmo_op),
       .i_dbus_rdt (dbus_rdt),
       .i_dbus_ack (dbus_ack),
       .o_dbg_fetch(o_dbg_fetch),
@@ -150,6 +153,10 @@ module soc_top #(
       .i_wb_mem_ack     (m_ack)
   );
 
+  // a cache-block operation (Zicbom) rides along with a data read; the arbiter puts a
+  // fetch on the bus instead whenever ibus_cyc is up
+  wire m_cmo = dbus_cmo & !ibus_cyc;
+
   // ---------------------------------------------------------------- address decode
   wire s_mem   = m_adr[31:29] == 3'b100;    // 0x8 cached, 0x9 uncached; the rest is I/O
 
@@ -170,8 +177,11 @@ module soc_top #(
   wire        io_ack;
   always @(posedge i_clk) begin
     {io_adr, io_dat, io_sel, io_we} <= {m_adr, m_dat, m_sel, m_we};
-    io_cyc <= !i_rst & m_stb & !s_mem & !io_ack;
+    io_cyc <= !i_rst & m_stb & !s_mem & !io_ack & !m_cmo;
   end
+  // a CMO outside the PSRAM has nothing to act on: acked here, no I/O slave sees it
+  reg  cmo_io_ack;
+  always @(posedge i_clk) cmo_io_ack <= !i_rst & m_stb & m_cmo & !s_mem & !cmo_io_ack;
   wire io_rom   = io_adr[31:28] == 4'h0;
   wire io_uart  = io_adr[31:20] == 12'h100;
   wire io_clint = io_adr[31:16] == 16'h1100;
@@ -199,7 +209,7 @@ module soc_top #(
                  ({32{plic_ack}} & plic_rdt) | ({32{flash_ack}} & flash_rdt) |
                  ({32{i2c_ack}} & {24'd0, i2c_rdt}) | ({32{spi_ack}} & spi_rdt) |
                  ({32{mem_ack}} & mem_rdt);
-  assign m_ack = io_ack | mem_ack;
+  assign m_ack = io_ack | mem_ack | cmo_io_ack;
 
   // ---------------------------------------------------------------- slaves
   bootrom #(.WORDS(BOOTROM_WORDS), .INIT_FILE(BOOTROM_FILE)) rom (
@@ -360,6 +370,8 @@ module soc_top #(
       .i_we        (m_we),
       .i_cyc       (m_stb & s_mem),
       .i_unc       (m_adr[28]),
+      .i_cmo       (m_cmo),
+      .i_cmo_op    (dbus_cmo_op),
       .o_rdt       (mem_rdt),
       .o_ack       (mem_ack),
       .o_req       (c_req),

@@ -7,7 +7,13 @@ memory write (word address, byte enables, data), including the write half of AMO
 successful SCs.
 
 Machine model (see doc/stage1_plan.md, M1):
-  * RV32IMA + Zicsr + Zifencei; fence, fence.i, wfi are no-ops.
+  * RV32IMA + Zicsr + Zifencei + Zicbom; fence, fence.i, wfi are no-ops.
+  * Zicbom: cbo.inval/clean/flush (MISC-MEM funct3 2, imm 0/1/2) write no register and never
+    trap as misaligned; they are translated like a load (R), but fault as a store (15). The
+    testbench records each one in RAM, which the program reads back: CMO_ADR = the
+    physical word address, CMO_ADR + 4 = (count << 2) | op. Only imm[2:0] is decoded, as in
+    the RTL: imm[2] = 1 (cbo.zero) or imm[1:0] = 3 is a no-op, and the reserved encodings
+    with higher imm bits set act as the CMO named by imm[1:0].
   * M and U modes. CSRs: mstatus (MIE, MPIE, MPP in {00,11}; a write's bit 11 decides MPP),
     mie (MTIE only), mip (MTIP, read-only), mtvec, mscratch, mepc, mcause (bits 31 and 3:0),
     mtval. Every other CSR reads 0 and ignores writes.
@@ -51,6 +57,7 @@ MTIP_ADR = 0x8000FFF8
 SEIP_ADR = 0x8000FFF4
 HALT_ADR = 0x8000FFFC
 MTIME_ADR = 0x8000FFF0
+CMO_ADR = 0x8000FFE8
 
 
 def sx(v, bits):
@@ -105,6 +112,11 @@ class ISS:
     def ld(self, adr, n):
         a = adr % self.size
         return int.from_bytes(self.mem[a:a + n], "little")
+
+    def poke(self, adr, val):
+        """A word the testbench writes into RAM itself (not a bus store)."""
+        a = adr % self.size
+        self.mem[a:a + 4] = (val & MASK).to_bytes(4, "little")
 
     def st(self, adr, n, val):
         lane = adr & 3
@@ -365,7 +377,16 @@ class ISS:
         elif op == 0x2F:
             res = self.amo(ins, a, b)
         elif op == 0x0F:
-            pass                                   # fence / fence.i
+            cbo = ins >> 20
+            if f3 == 2 and cbo & 7 in (0, 1, 2):   # Zicbom cbo.inval / clean / flush
+                try:
+                    pa = self.xlate(a, "r")
+                except Trap as t:
+                    raise Trap(15, t.tval)
+                self.n_cmo = getattr(self, "n_cmo", 0) + 1
+                self.poke(CMO_ADR, pa & ~3)
+                self.poke(CMO_ADR + 4, (self.n_cmo << 2) | (cbo & 3))
+            # fence / fence.i / cbo.zero: no-ops
         elif op == 0x73:
             if f3 == 0 and self.smode:
                 if ins == 0x00000073:

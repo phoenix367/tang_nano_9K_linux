@@ -12,6 +12,9 @@
 #   CONFIG=mmu sim/soc/run.sh                   # stage 2: S-mode CPU + MMU kernel (boot ROM 'B')
 #   ROM_INPUT=recs.bin sim/soc/run.sh           # boot ROM command records (see sim_main.cpp);
 #                                               # default: 'b' (preloaded RAM) or 'f' (FLASH=1)
+#   ROM_CMD=b sim/soc/run.sh                    # that one command instead (CONFIG=mmu: 'B')
+#   IMAGE=<file.bin> sim/soc/run.sh             # boot this instead of the kernel Image
+#                                               # (bare-metal tests: sw/tests/build.sh)
 #
 # Image/DTB come from sw/build.sh ($WORK/images-tang9k). The Verilator build lives in
 # $WORK/verilator-soc-w<W>; the console log goes to sim/soc/results/.
@@ -53,12 +56,12 @@ if [[ -n "${FLASH:-}" ]]; then
   python3 "$REPO/sw/mkflash.py" "$IMG/Image" "$IMG/$DTB" "$IMG/flash.bin" $([[ $SMODE == 1 ]] && echo --smode) > /dev/null
   args=(+flash_load="$IMG/flash.bin" +flash_addr=0)
 else
-  args=(+psram_load0="$IMG/Image" +psram_addr0=0 +psram_load1="$IMG/$DTB" +psram_addr1=7ff000)
+  args=(+psram_load0="${IMAGE:-$IMG/Image}" +psram_addr0=0 +psram_load1="$IMG/$DTB" +psram_addr1=7ff000)
 fi
 if [[ -z "${ROM_INPUT:-}" ]]; then
   ROM_INPUT="$OBJ/rom_input.bin"
   python3 -c 'import sys,struct; c=sys.argv[2].encode(); open(sys.argv[1],"wb").write(struct.pack("<I",len(c))+c)' \
-      "$ROM_INPUT" "$([[ -n "${FLASH:-}" ]] && echo f || echo $BOOT)"
+      "$ROM_INPUT" "$([[ -n "${FLASH:-}" ]] && echo f || echo ${ROM_CMD:-$BOOT})"
 fi
 args+=(+rom_input="$ROM_INPUT" +uart_log="${UART_LOG:-$HERE/results/soc_$TAG.uart.log}" +clk_hz="$CLK_HZ")
 if [[ "$VIDEO" == 1 ]]; then

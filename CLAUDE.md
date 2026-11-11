@@ -45,7 +45,10 @@ if it exists.
       reads each SDC file on its own, so a second SDC can't refer to the first one's clocks.
     - Stage 2 + video + text mode + I2C + SD: 74% logic (89% of CLS), BSRAM 24/26, TNS 0.
       - Fmax swings with placement: 45.7 MHz in one build, 42.25 MHz after the +7-LUT
-        SD CRC.
+        SD CRC, 42.126 MHz with Zicbom (`tang9k_soc_cbo.fs`).
+      - Zicbom's first build made 42.085 MHz: the CMO decode reached the cache's state
+        logic. Latching the CMO in the cache (`cmo_q`) and decoding only imm[2:0] took that
+        path out. The worst paths are now SERV's funct3 → CSR/RF write data.
       - Without the AMO unit's registered SC compare it was 38.4–39.9 MHz
         (`doc/peripherals.md`).
     - `SDC_MEM_MULT` (default 28) over-constrains the SDC only, for experiments. 29/30 made
@@ -116,8 +119,14 @@ if it exists.
     - The bridge sometimes hangs at the first sector erase (5 of 12 runs). The hung runs
       reported bridge status 0x0003F020, the good ones 0x0001F020. Retries in the same state
       hang too; reconfiguring the FPGA cleared it.
-    - So a watchdog SIGKILLs a stuck attempt after 60 s. The next attempt first
-      reconfigures (`openFPGALoader -r`), detaches ftdi_sio again and rescans the cable.
+    - It also stopped once partway through programming (43%, for 45 min). Unplugging and
+      replugging the board's USB cleared it.
+    - So a watchdog SIGKILLs an attempt whose progress hasn't changed for 60 s. The next
+      attempt first reconfigures (`openFPGALoader -r`), detaches ftdi_sio again and rescans
+      the cable.
+    - Don't wrap the script in a short `timeout`: killing it leaves `programmer_cli` holding
+      the cable (openFPGALoader then fails with "unable to claim usb device") and the flash
+      half-written.
     - A stuck `programmer_cli` ignores SIGTERM, and a failing `kill` under `set -e` used to
       end the script. The SRAM erase is bounded too (30 s).
     - It also writes the boot splash: `sw/tools/mksplash.py` (default picture, or
@@ -126,14 +135,19 @@ if it exists.
     with a CRC check. `qerv_boot.py --reconfig` reloads it (openFPGALoader -r), as at
     power-on.
   - **What the board holds now:**
-    - Internal flash: the stage-2 + video bitstream with the splash boot ROM (SMODE=1
-      VIDEO=1, reset on pin 3; copy at `/mnt/data/build/tang9k_linux/tang9k_soc_video_v2.fs`;
-      without video: `tang9k_soc_smode1_42mhz_utlb.fs`).
-    - SPI flash: the MMU Linux image (fbcon, framebuffer DT, S-mode flag) plus the boot
-      splash (the image from before video is `flash_mmu_pre_video.bin` there).
-    - At power-up the splash is on screen from the boot ROM on. Linux autoboots, and when
-      its shell starts the screen switches to the framebuffer console: `~ #` about 19.4 s
-      after the prompt.
+    - Both were last written on 2026-11-11, with the system as of Zicbom (text console, I2C,
+      SD, PLIC, cache-block operations).
+    - Internal flash: `/mnt/data/build/tang9k_linux/tang9k_soc_cbo.fs` (SMODE=1 VIDEO=1,
+      splash boot ROM, reset on pin 3).
+    - SPI flash: `/mnt/data/build/tang9k_linux/flash_mmu_cbo.bin` (3,433,076 B: Image
+      3,395,228, DTB 2,871, S-mode flag, splash 29,300). Earlier images:
+      `flash_mmu_irq.bin` (with `tang9k_soc_irq.fs`) and `flash_mmu_pre_video.bin`.
+    - Flash a kernel and a bitstream together: a kernel's DT expects the devices of its own
+      bitstream (text buffer, I2C, SPI).
+    - At power-up the splash is on screen from the boot ROM on. Linux autoboots, and when its
+      shell starts the screen switches to the text console: `Run /init` 19.8 s and `~ #`
+      24.6 s after the ROM's prompt (the irq system: 16.0 / 19.3 s; I2C + SD init and the
+      larger Image account for it).
   - **Checking the flash:** `qerv_boot.py --hash-flash flash.bin` has the boot ROM hash the
     flash window (2.7 MB in ~18 s). `--flash-boot` boots it, and `--autoboot` loads the
     bitstream and sends nothing (the power-up path).
@@ -188,6 +202,13 @@ if it exists.
     PSRAM command. The arbiter is the IP's register stage and shares the IP with the video
     DMA: CPU first, the DMA first only when its line deadline is near. The cache also serves
     the uncached alias: posted single-beat writes and beat-0 reads.
+    - **Cache-block operations (Zicbom):** the CPU's `cbo.clean`/`cbo.flush`/`cbo.inval`
+      reach the cache as a request with `i_cmo`/`i_cmo_op`. clean and flush write a dirty
+      line back (the eviction burst); clean keeps the line, flush drops it. inval drops it
+      without a write-back. A miss or the uncached alias is acked at once. The ack comes
+      after the write burst is granted, so a later DMA read sees the data.
+    - In soc_top the flag skips the arbiter (`m_cmo = dbus_cmo & !ibus_cyc`). A CMO to an
+      I/O address is acked there and never reaches a slave.
   - **One write stream:** both channels' wr_data/data_mask carry the same stream. A write
     enables bytes only in its granted cycle, and writes are kept 8 cycles apart.
   - `video_ctrl.v` (`VIDEO=1`): registers, `video_dma.v`, a 2-line buffer and `video_out.v`
@@ -223,6 +244,13 @@ if it exists.
   - **Full-boot simulation:** `sim/soc/run.sh` (Verilator; env `INPUT`, `FLASH=1`, `W`,
     `MAX_CYCLES`, `QUIET=1`). It runs ~2.4 MHz, so a full boot takes ~8 min. The console goes
     to `sim/soc/results/`.
+    - `IMAGE=<bin>` boots another image instead of the kernel, and `ROM_CMD=b` replaces the
+      ROM command (`CONFIG=mmu` sends `B`).
+    - Bare-metal SoC tests live in `sw/tests/*.S`; `sw/tests/build.sh` builds them.
+      `cbo_test.S` checks the cache-block operations through the uncached alias: it prints
+      PASS/FAIL and powers off, in ~1M cycles.
+      - It passes in simulation on both CPUs, and on the board
+        (`qerv_boot.py --bitstream <fs> --load cbo_test.bin@0x80000000 --boot`).
     - `VIDEO=1` builds the video controller and runs at the board's 42 MHz (`+clk_hz`) with
       the 25.2 MHz pixel clock between the CPU clock's edges.
     - `FRAME_DUMP=1` writes every 60th frame to `$WORK/frames-<tag>/` as PPM.
@@ -256,6 +284,11 @@ if it exists.
     - `verif/cache/run.sh` (~4 min): cache + arbiter. Random cached and uncached traffic with
       an 8-line cache, plus a video-like DMA reader; the PSRAM model's protocol checker must
       stay silent.
+      - It also mixes in cache-block operations, checked through the PSRAM model's backdoor.
+        After clean/flush the block is in PSRAM, and the write-back was granted before the
+        ack. Before an inval the TB writes "device" data into PSRAM; it must survive and
+        become what the CPU reads. The line's tag must end in the right state.
+      - Six cache mutants each fail it.
     - `verif/video/run.sh`: TMDS/timing/PHY, then text frames (TSTART, cursor) against a
       reference model. PHY=1 decodes the `OSER10` model's output; PHY=0 is the full 640×480
       timing (~7 min). `PHYS=1` runs one.
@@ -309,8 +342,19 @@ if it exists.
     - **Cost of I2C + SD:** +500 KB of kernel; 1,916 KB available after boot (2,820 before).
       `Run /init` moves from 10.3 to 12.5 s.
     - **SD writes are broken (open):** in the first write test, most of a 512 KB file read
-      back as zeros, with no errors logged (`doc/peripherals.md`). Don't write to the card
-      until this is fixed.
+      back as zeros, with no errors logged (`doc/peripherals.md`). The user suspects the
+      card itself; it hasn't been tried with another card. Don't write to it.
+      - Later boots (2026-11-11) found no card at all, on the new bitstream and on
+        `tang9k_soc_crc.fs`: the slot is empty or the card no longer answers.
+    - **Zicbom:** the MMU kernel has `CONFIG_RISCV_ISA_ZICBOM` (DT `zicbom`,
+      `riscv,cbom-block-size = <32>`), for drivers of non-coherent DMA devices.
+      - No current driver uses it. The kernel does run `cbo.flush` over its atomic DMA pool
+        at boot.
+      - `/proc/cpuinfo` shows `rv32ima_zicbom_...`. The kernel is +8 KB.
+      - The option selects `DMA_DIRECT_REMAP`, which preallocates a 128 KB atomic DMA pool.
+        The bootargs' `coherent_pool=4K` shrinks it to one page; available memory is then
+        2,100 KB after boot.
+      - Kernel time to `Run /init`: 12.39 s, unchanged.
     - **SD reads:** 72 KB/s buffered (95 KB/s raw) with the SPI-mode CRC on (the default).
       The SPI master computes the CRC16 (patches `0005`/`0006`); in software it was
       44 KB/s.
@@ -358,7 +402,9 @@ if it exists.
       → xlate → address path made 40.1 MHz; with `o_xlate`, 42.06 MHz.
   - **Tests:**
     - `verif/qerv/run_directed.sh` runs `s2_*` tests with SMODE=1 against `iss.py --smode`.
-      `s2_eirq` covers SEI; the TB drives SEIP with a store to `0x8000FFF4`.
+      `s2_eirq` covers SEI; the TB drives SEIP with a store to `0x8000FFF4`. `s2_cbo` (and
+      `m1_cbo` on the stage-1 core) covers Zicbom. The TB records each CMO's physical
+      address and `(count << 2) | op` at `0x8000FFE8`/`FFEC`, and iss.py models the same.
       (`TESTS="s2_mmu"` selects).
     - `SMODE=1 [ENV=v] verif/qerv/run_riscv_tests.sh` runs the riscv-tests on the stage-2
       core. `ENV=v` (user tests on demand-paged SV32, 512 KB TB RAM) takes ~10 min at W=4.
@@ -367,6 +413,16 @@ if it exists.
     RF writes trail the serial counter, so anything that selects their RF address must stay
     stable until the next fetch (see `tpriv` in serv_csr).
 - **QERV-Linux CPU (M1):** `rtl/qerv/qerv_cpu.v` = SERV `LINUX=1` + MDU + `rtl/qerv/amo_unit.v`.
+  - **Zicbom** (both modes): `cbo.inval`/`clean`/`flush` (imm 0/1/2) leave as a byte read of
+    rs1 with `o_dbus_cmo` and `o_dbus_cmo_op` (00 inval, 01 clean, 10 flush).
+    - There is no immediate, no misalignment trap, and no register write. `cbo.zero` stays a
+      no-op.
+    - The MMU checks a CMO like a load (R needed, D not) and reports its fault as a store
+      page fault (15).
+    - No `menvcfg`/`senvcfg`: there are no illegal-instruction traps anyway, so U-mode may
+      use them too.
+    - At W=1, the decoder must not shift the immediate register holding rs1's address
+      (`co_immdec_en[1] & !co_cmo`). Without that, rs1 read as X.
   - `verif/qerv/run_riscv_tests.sh` runs riscv-tests rv32ui/um/ua, p env, in U-mode via `mret`.
     It runs at W=4 and W=1 in ~50 s (env `WIDTHS`, `SUITES`). `ma_data` is skipped because
     SERV traps misaligned accesses, which Linux emulates.
@@ -568,6 +624,7 @@ fixed under `LINUX=1`.
   - Readable mie and mip.
   - Exact 12-bit CSR decode: unknown CSRs read 0 and ignore writes.
   - fence/fence.i/wfi as no-ops, and the mcause fix.
+  - Zicbom: `o_dbus_cmo`/`o_dbus_cmo_op` (decode only; the cache does the work).
 
   The changed files are `serv_decode.v`, `serv_csr.v`, `serv_top.v` and `serv_rf_top.v`;
   `serv_state.v` also exports `o_ibus_sel` (ibus_cyc without the reset gating), and

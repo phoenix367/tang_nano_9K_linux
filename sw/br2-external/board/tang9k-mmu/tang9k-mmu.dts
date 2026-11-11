@@ -11,7 +11,9 @@
 	model = "Tang Nano 9K QERV (MMU)";
 
 	chosen {
-		bootargs = "earlycon=uart8250,mmio,0x10000000,1000000 console=ttyS0";
+		/* coherent_pool: Zicbom brings DMA_DIRECT_REMAP, which preallocates a 128 KB atomic
+		   DMA pool at boot; no driver here allocates coherent DMA memory, so keep one page */
+		bootargs = "earlycon=uart8250,mmio,0x10000000,1000000 console=ttyS0 coherent_pool=4K";
 		stdout-path = &uart0;
 		/* "QRNGSEED" marker + 56 bytes: the boot ROM fills it with what entropy the board
 		   has (sw/bootrom/bootrom.S seed_dtb); Linux credits it and its crng is ready at once. */
@@ -56,9 +58,11 @@
 			reg = <0>;
 			status = "okay";
 			compatible = "riscv";
-			riscv,isa = "rv32ima";
+			riscv,isa = "rv32ima_zicbom";
 			riscv,isa-base = "rv32i";
-			riscv,isa-extensions = "i", "m", "a", "zicsr", "zifencei";
+			riscv,isa-extensions = "i", "m", "a", "zicsr", "zifencei", "zicbom";
+			/* cbo.clean/flush/inval act on one L1 cache line (rtl/soc/l1_cache.v) */
+			riscv,cbom-block-size = <32>;
 			mmu-type = "riscv,sv32";
 
 			cpu0_intc: interrupt-controller {

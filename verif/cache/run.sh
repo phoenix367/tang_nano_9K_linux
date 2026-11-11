@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # L1 cache + PSRAM arbiter unit test (Icarus, ~1 min): random cached and uncached traffic with
-# an 8-line cache, plus a video-like DMA reader on the arbiter (DMA=0 to leave it out).
+# an 8-line cache, cache-block operations (Zicbom), plus a video-like DMA reader on the
+# arbiter (DMA=0 to leave it out).
 #   verif/cache/run.sh            DMA on and off
 #   DMAS=1 OPS=100000 SEED=7 verif/cache/run.sh
 set -euo pipefail

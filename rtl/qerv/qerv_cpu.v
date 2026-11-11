@@ -1,6 +1,8 @@
 // QERV-Linux CPU: SERV (external/serv, qerv-linux branch) with LINUX=1, the MDU for the M
-// extension and the AMO unit for the A extension. ISA: RV32IMA_Zicsr_Zifencei, M and U modes,
-// timer interrupt, no MMU. See doc/stage1_plan.md (M1).
+// extension and the AMO unit for the A extension. ISA: RV32IMA_Zicsr_Zifencei_Zicbom, M and
+// U modes, timer interrupt, no MMU. See doc/stage1_plan.md (M1).
+// Zicbom: cbo.clean/flush/inval leave on the data bus as a read with o_dbus_cmo set
+// (o_dbus_cmo_op 00 inval, 01 clean, 10 flush); the L1 cache carries them out.
 // SMODE=1 (stage 2, doc/stage2_plan.md): adds S-mode and the SV32 MMU (rtl/qerv/sv32_mmu.v)
 // between the core and the buses; the AMO unit then works on physical addresses.
 //
@@ -34,6 +36,8 @@ module qerv_cpu #(
     output wire [ 3:0] o_dbus_sel,
     output wire        o_dbus_we,
     output wire        o_dbus_cyc,
+    output wire        o_dbus_cmo,              // Zicbom: a cache-block operation, not a read
+    output wire [ 1:0] o_dbus_cmo_op,           // 00 inval, 01 clean, 10 flush
     input  wire [31:0] i_dbus_rdt,
     input  wire        i_dbus_ack,
     // debug: a fetch completes on the bus, and its physical address
@@ -46,16 +50,18 @@ module qerv_cpu #(
   wire        ibus_cyc, ibus_sel, ibus_ack, ibus_fault;
   wire [31:0] dbus_adr, dbus_dat, dbus_rdt;
   wire [ 3:0] dbus_sel;
-  wire        dbus_we, dbus_cyc, dbus_ack, dbus_amo, dbus_fault, dbus_fault_we;
+  wire        dbus_we, dbus_cyc, dbus_ack, dbus_amo, dbus_fault, dbus_fault_we, dbus_cmo;
   wire [ 4:0] dbus_amo_op;
+  wire [ 1:0] dbus_cmo_op;
   wire [ 1:0] priv;
   wire        sum, mxr, satp_mode, xlate, sfence;
   wire [19:0] satp_ppn;
   // AMO unit input (physical)
   wire [31:0] pd_adr, pd_dat, pd_rdt;
   wire [ 3:0] pd_sel;
-  wire        pd_we, pd_cyc, pd_ack, pd_amo, pd_fetch;
+  wire        pd_we, pd_cyc, pd_ack, pd_amo, pd_fetch, pd_cmo;
   wire [ 4:0] pd_amo_op;
+  wire [ 1:0] pd_cmo_op;
 
   wire [31:0] ext_rs1, ext_rs2, mdu_rd;
   wire [ 2:0] ext_funct3;
@@ -87,6 +93,8 @@ module qerv_cpu #(
       .o_dbus_cyc   (dbus_cyc),
       .o_dbus_amo   (dbus_amo),
       .o_dbus_amo_op(dbus_amo_op),
+      .o_dbus_cmo   (dbus_cmo),
+      .o_dbus_cmo_op(dbus_cmo_op),
       .i_dbus_rdt   (dbus_rdt),
       .i_dbus_ack   (dbus_ack),
       .o_ext_rs1    (ext_rs1),
@@ -133,6 +141,8 @@ module qerv_cpu #(
           .i_dbus_cyc     (dbus_cyc),
           .i_dbus_amo     (dbus_amo),
           .i_dbus_amo_op  (dbus_amo_op),
+          .i_dbus_cmo     (dbus_cmo),
+          .i_dbus_cmo_op  (dbus_cmo_op),
           .o_dbus_rdt     (dbus_rdt),
           .o_dbus_ack     (dbus_ack),
           .o_dbus_fault   (dbus_fault),
@@ -144,6 +154,8 @@ module qerv_cpu #(
           .o_mbus_cyc     (pd_cyc),
           .o_mbus_amo     (pd_amo),
           .o_mbus_amo_op  (pd_amo_op),
+          .o_mbus_cmo     (pd_cmo),
+          .o_mbus_cmo_op  (pd_cmo_op),
           .o_mbus_fetch   (pd_fetch),
           .i_mbus_rdt     (pd_rdt),
           .i_mbus_ack     (pd_ack)
@@ -162,8 +174,9 @@ module qerv_cpu #(
       assign pd_fetch    = 1'b0;
       wire unused_sel = ibus_sel;
       assign ibus_fault = 1'b0;
-      assign {pd_adr, pd_dat, pd_sel, pd_we, pd_cyc, pd_amo, pd_amo_op} =
-             {dbus_adr, dbus_dat, dbus_sel, dbus_we, dbus_cyc, dbus_amo, dbus_amo_op};
+      assign {pd_adr, pd_dat, pd_sel, pd_we, pd_cyc, pd_amo, pd_amo_op, pd_cmo, pd_cmo_op} =
+             {dbus_adr, dbus_dat, dbus_sel, dbus_we, dbus_cyc, dbus_amo, dbus_amo_op, dbus_cmo,
+              dbus_cmo_op};
       assign dbus_rdt   = pd_rdt;
       assign dbus_ack   = pd_ack;
       assign {dbus_fault, dbus_fault_we} = 2'b00;
@@ -180,6 +193,11 @@ module qerv_cpu #(
       .o_mdu_ready(mdu_ready),
       .o_mdu_rd   (mdu_rd)
   );
+
+  // a CMO is not an AMO: amo_unit passes it through combinationally like any read, so its
+  // flag goes around the unit
+  assign o_dbus_cmo    = pd_cmo;
+  assign o_dbus_cmo_op = pd_cmo_op;
 
   amo_unit amo (
       .i_clk       (i_clk),

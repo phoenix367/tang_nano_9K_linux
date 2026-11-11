@@ -165,9 +165,12 @@ Two peripherals added after the video work (2026-11-11), both in the I/O region 
     until an fsck clears it; busybox has no `fsck.vfat`. `poweroff` unmounts (inittab
     `umount -a -r`).
 
-## Open problem: writes come back as zeros (2026-11-11, under investigation)
+## Open problem: writes come back as zeros (2026-11-11)
 
-**Don't write to the card yet.**
+**Don't write to this card.** The user judges the card itself faulty. The board's write path
+has not been tried with another card yet. Later boots the same day found no card at all,
+with the new bitstream and with `tang9k_soc_crc.fs`, which had read it before: the slot is
+empty, or the card no longer answers.
 
 - **Test:** a 512 KB random file from `/tmp` was copied to `/mnt` with `cp` + `sync`,
   taking 9.3 s. After `drop_caches` it read back with a different MD5.
@@ -178,8 +181,19 @@ Two peripherals added after the video work (2026-11-11), both in the I/O region 
 - **What this shows:** the card accepted every block, and with CRC on it checks each block's
   CRC16. With the hardware TX CRC, though, that CRC covers only the bits actually shifted
   out. So it would also match a block that was all zeros when it left the SPI master.
-- **Not yet known:** whether the zeros were sent, written elsewhere, or lost in the card.
-  Whether the file's FAT chain is right is not checked either.
+- **Read-only checks since:**
+  - **Reads are sound.** `encl230.gcode` (6.2 MB) contains no zero bytes and reads as
+    G-code throughout.
+  - **The metadata landed.** The test file's directory entry is right: cluster 184069,
+    512 KB. Its chain is 128 contiguous clusters with a correct end marker, and both FAT
+    copies are equal.
+  - **Data:** the zeros are in the file's own sectors (partition sectors 1,488,920 +
+    0–895).
+  - **Free space:** the clusters just before and after the file read as zeros too. So
+    "never stored" and "zeros sent" look the same on this card.
+- **Not yet known:** whether the zeros were sent or the card dropped the data. Software TX
+  CRC would separate the two: it is computed from the buffer, so zeros shifted out of a
+  good buffer would get CRC errors.
 - **What was written:** only the test file `/mnt/qerv_wtest.bin` and the FAT/directory
   updates for it.
 

@@ -8,6 +8,14 @@
 // region preloaded through the model's backdoor, as video_dma does (two reads outstanding at
 // most, 8 cycles between grants), urgent for 400 cycles of every 2000; every beat is
 // checked. The model's protocol checker (command spacing, write beats) must stay quiet.
+// CMO=1 mixes in cache-block operations (Zicbom: inval/clean/flush) on any byte of a block,
+// cached or uncached. Besides the CPU view (ref_mem) the checks use the PSRAM itself (the
+// model's backdoor): after clean/flush the block in PSRAM equals ref_mem, and the write-back
+// was granted before the ack (so a later DMA read sees it). Before an inval the testbench
+// writes new "device" data into the PSRAM block, as a DMA write would; after it, PSRAM still
+// holds that data (nothing written back over it) and the CPU sees it. A block that was not
+// dirty must already match in PSRAM. The line's tag ends valid and clean (clean) or invalid
+// (flush/inval), and is left alone on a miss or the uncached alias.
 // Run: verif/cache/run.sh.
 `timescale 1ns/1ps
 `default_nettype none
@@ -17,6 +25,8 @@ module tb_cache;
   parameter OPS   = 40000;
   parameter SEED  = 1;
   parameter DMA   = 1;
+  parameter CMO   = 1;
+  localparam IW = $clog2(LINES), TW = 23 - 5 - IW;
 
   reg clk = 0, rst = 1;
   always #5 clk = !clk;
@@ -24,7 +34,8 @@ module tb_cache;
   reg  [22:0] adr;
   reg  [31:0] dat;
   reg  [ 3:0] sel;
-  reg         we, cyc = 0, unc = 0;
+  reg         we, cyc = 0, unc = 0, cmo = 0;
+  reg  [ 1:0] cmo_op = 0;
   wire [31:0] rdt;
   wire        ack;
 
@@ -44,7 +55,7 @@ module tb_cache;
 
   l1_cache #(.LINES(LINES)) dut (
       .i_clk(clk), .i_rst(rst), .i_adr(adr), .i_dat(dat), .i_sel(sel), .i_we(we), .i_cyc(cyc),
-      .i_unc(unc), .o_rdt(rdt), .o_ack(ack),
+      .i_unc(unc), .i_cmo(cmo), .i_cmo_op(cmo_op), .o_rdt(rdt), .o_ack(ack),
       .o_req(c_req), .o_req_we(c_we), .o_req_adr(c_adr), .i_gnt(c_gnt),
       .o_wdata(c_wdata), .o_wmask(c_wmask), .i_rvalid(c_rvalid), .i_rdata(c_rdata),
       .o_hits(hits), .o_misses(misses), .o_writebacks(wbs));
@@ -91,11 +102,88 @@ module tb_cache;
   task bus(input [22:0] a, input w, input [31:0] d, input [3:0] s, input u);
     begin
       @(posedge clk);
-      adr <= a; we <= w; dat <= d; sel <= s; unc <= u; cyc <= 1'b1;
+      adr <= a; we <= w; dat <= d; sel <= s; unc <= u; cyc <= 1'b1; cmo <= 1'b0;
       @(posedge clk);
       while (!ack) @(posedge clk);
       got_w = rdt;
       cyc <= 1'b0;
+    end
+  endtask
+
+  // ---------------------------------------------------------------- cache-block operations
+  integer   n_cmos = 0, cmo_res = 0, cmo_dirty = 0;
+  reg [ 1:0] op;
+  reg [22:0] blk;
+  reg [TW+1:0] t_before, t_after;
+  reg        resident;
+  reg [ 7:0] pb;
+  reg [ 7:0] dev[0:31];                         // inval: what a device wrote to the block
+  integer    wr_grants = 0, wr_before;
+  always @(posedge clk) if (c_req & c_we & c_gnt) wr_grants = wr_grants + 1;
+  reg [ 2:0] last_r = 0;                        // the last cached access, which CMOs favour
+  reg [11:0] last_off = 0;
+  task cmo_check(input [8*48-1:0] what);
+    begin
+      errors = errors + 1;
+      if (errors <= 5) $display("CMO %0d op %0d @%06h%s: %0s", n_cmos, op, blk,
+                                r >= 4 ? " (uncached)" : "", what);
+    end
+  endtask
+  task do_cmo;
+    integer j;
+    begin
+      r   = {$random(seed)} % 6;
+      off = $random(seed);
+      if (($random(seed) & 3) != 0) begin        // mostly the block just used: likely resident
+        r   = last_r;
+        off = {last_off[11:5], off[4:0]};
+      end
+      op  = {$random(seed)} % 3;                 // 0 inval, 1 clean, 2 flush
+      blk = region_base(r) + {off[11:5], 5'd0};
+      t_before = dut.tag_ram[blk[5 +: IW]];
+      resident = t_before[TW+1] && (t_before[TW-1:0] == blk[22 -: TW]);
+      n_cmos = n_cmos + 1;
+      if (resident && r < 4) cmo_res = cmo_res + 1;
+      if (resident && r < 4 && t_before[TW]) cmo_dirty = cmo_dirty + 1;
+      if (r < 4)
+        for (j = 0; j < 32; j = j + 1) begin
+          pb = psram.backdoor_read_byte(blk + j);
+          if (!(resident && t_before[TW]) && pb !== ref_mem[{r, off[11:5], j[4:0]}]) begin
+            cmo_check("PSRAM differs for a block that is not dirty");
+            j = 32;
+          end
+        end
+      if (r < 4 && op == 2'd0)
+        for (j = 0; j < 32; j = j + 1) begin
+          dev[j] = $random(seed);
+          psram.backdoor_write_byte(blk + j, dev[j]);
+        end
+      wr_before = wr_grants;
+      @(posedge clk);
+      adr <= region_base(r) + off; we <= 1'b0; sel <= 4'hF; unc <= r >= 4; cyc <= 1'b1;
+      cmo <= 1'b1; cmo_op <= op;
+      @(posedge clk);
+      while (!ack) @(posedge clk);
+      cyc <= 1'b0; cmo <= 1'b0;
+      if (wr_grants - wr_before != ((r < 4 && resident && t_before[TW] && op != 2'd0) ? 1 : 0))
+        cmo_check("write-back count at the ack");
+      repeat (4) @(posedge clk);                 // the write-back's last beats reach the model
+      t_after = dut.tag_ram[blk[5 +: IW]];
+      if (r >= 4 || !resident) begin
+        if (t_after !== t_before) cmo_check("touched a line it does not hold");
+      end else if (op == 2'd1) begin
+        if (t_after !== {1'b1, 1'b0, t_before[TW-1:0]}) cmo_check("clean: line not valid and clean");
+      end else if (t_after[TW+1] !== 1'b0) cmo_check("line still valid");
+      if (r < 4)
+        for (j = 0; j < 32; j = j + 1) begin
+          pb = psram.backdoor_read_byte(blk + j);
+          if (pb !== (op == 2'd0 ? dev[j] : ref_mem[{r, off[11:5], j[4:0]}])) begin
+            cmo_check(op == 2'd0 ? "inval: the device's data was overwritten" :
+                                   "PSRAM differs after clean/flush");
+            j = 32;
+          end
+          if (op == 2'd0) ref_mem[{r, off[11:5], j[4:0]}] = dev[j];   // the CPU sees it now
+        end
     end
   endtask
 
@@ -155,6 +243,10 @@ module tb_cache;
     seed = SEED;
     repeat (2) @(posedge clk);
     for (i = 0; i < 4096; i = i + 1) psram.backdoor_write_byte(DMA_BASE + i, $random(seed));
+    // PSRAM under the cached regions starts random, so an inval of a line that was never
+    // written back has something other than zeros to fall back to
+    for (r = 0; r < 4; r = r + 1)
+      for (i = 0; i < 4096; i = i + 1) psram.backdoor_write_byte(region_base(r) + i, $random(seed));
     repeat (2) @(posedge clk);
     rst = 0;
     // initialise every word of the six regions
@@ -167,11 +259,15 @@ module tb_cache;
       bus(region_base(r) + off, 1'b1, exp_w, 4'hF, r >= 4);
     end
     for (n = 0; n < OPS; n = n + 1) begin
+      if (CMO && ({$random(seed)} % 8) == 0) begin
+        do_cmo;
+      end else begin
       r    = {$random(seed)} % 6;
       size = ($random(seed) & 3) == 3 ? 2 : ($random(seed) & 3) == 0 ? 0 : (($random(seed) & 1) ? 1 : 2);
       off  = $random(seed);
       off  = size == 2 ? {off[11:2], 2'b00} : size == 1 ? {off[11:1], 1'b0} : off;
       mask = size == 2 ? 32'hFFFF_FFFF : size == 1 ? 32'h0000_FFFF : 32'h0000_00FF;
+      if (r < 4) {last_r, last_off} = {r, off};
       if ($random(seed) & 1) begin                // write
         exp_w = $random(seed);
         for (i = 0; i <= (size == 2 ? 3 : size); i = i + 1)
@@ -191,15 +287,19 @@ module tb_cache;
                                     got_w, exp_w);
         end
       end
+      end
     end
     repeat (40) @(posedge clk);
     $display("cache: %0d reads, %0d writes; uncached: %0d reads, %0d writes; %0d errors; hits %0d misses %0d writebacks %0d",
              reads, writes, ureads, uwrites, errors, hits, misses, wbs);
+    if (CMO)
+      $display("cmo: %0d operations, %0d on a resident line (%0d dirty)", n_cmos, cmo_res, cmo_dirty);
     if (DMA)
       $display("dma: %0d bursts, %0d beats, %0d errors in %0d cycles (%0.1f cycles/burst)",
                d_bursts, d_beats, d_errors, cyc_n, 1.0 * cyc_n / (d_bursts > 0 ? d_bursts : 1));
     $display("%s: model protocol errors %0d",
-             (errors || d_errors || psram.error_count || (DMA && d_bursts == 0)) ? "FAIL" : "PASS",
+             (errors || d_errors || psram.error_count || (DMA && d_bursts == 0) ||
+              (CMO && cmo_dirty == 0)) ? "FAIL" : "PASS",
              psram.error_count);
     $finish;
   end

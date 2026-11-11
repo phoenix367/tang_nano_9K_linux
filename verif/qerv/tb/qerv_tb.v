@@ -5,7 +5,10 @@
 //     SEIP_ADR the supervisor external interrupt line (SMODE),
 //   * stores to MTIME_ADR / MTIME_ADR+4 set the low / high half of mtime (SMODE time CSR),
 //   * a store to HALT_ADR ends the run (directed tests: 0 = pass, else failing test id),
-//   * a store to +tohost=<hex> ends the run (riscv-tests: 1 = pass, else (n << 1) | 1).
+//   * a store to +tohost=<hex> ends the run (riscv-tests: 1 = pass, else (n << 1) | 1),
+//   * a cache-block operation (Zicbom) is acked like a read; the testbench then writes its
+//     physical word address to CMO_ADR and (count << 2) | op to CMO_ADR + 4 in RAM, for the
+//     program to check (verif/qerv/iss.py does the same).
 // RAM is MEMSIZE bytes and decodes only the low address bits, so programs can be linked at
 // 0x80000000 (riscv-tests) with RESET_PC = 0x80000000.
 //
@@ -13,6 +16,7 @@
 //   I <pc> <cycle>                 instruction fetch acknowledged
 //   S <adr> <dat> <sel> <cycle>    write acknowledged (incl. the write half of an AMO)
 //   R <adr> <sel> <cycle>          read acknowledged
+//   C <adr> <op> <cycle>           cache-block operation acknowledged
 `default_nettype none
 `timescale 1ns/1ps
 
@@ -27,6 +31,7 @@ module qerv_tb;
   parameter [31:0] MTIME_ADR = 32'h8000_FFF0;
   parameter [0:0]  SMODE    = 1'b0;
   parameter [31:0] HALT_ADR = 32'h8000_FFFC;
+  parameter [31:0] CMO_ADR  = 32'h8000_FFE8;
   parameter        EXTRA_WAIT = 0;
   parameter        TIMEOUT  = 20000000;
 
@@ -48,7 +53,8 @@ module qerv_tb;
 
   wire [31:0] ibus_adr, ibus_rdt, dbus_adr, dbus_dat, dbus_rdt;
   wire [ 3:0] dbus_sel;
-  wire        ibus_cyc, ibus_ack, dbus_we, dbus_cyc, dbus_ack;
+  wire        ibus_cyc, ibus_ack, dbus_we, dbus_cyc, dbus_ack, dbus_cmo;
+  wire [ 1:0] dbus_cmo_op;
   wire        fetch_ack;   // a physical fetch completes (SMODE: fetches use the dbus port)
   wire [31:0] fetch_adr;
 
@@ -67,6 +73,8 @@ module qerv_tb;
       .o_dbus_sel (dbus_sel),
       .o_dbus_we  (dbus_we),
       .o_dbus_cyc (dbus_cyc),
+      .o_dbus_cmo (dbus_cmo),
+      .o_dbus_cmo_op(dbus_cmo_op),
       .i_dbus_rdt (dbus_rdt),
       .i_dbus_ack (dbus_ack),
       .o_dbg_fetch(fetch_ack),
@@ -139,6 +147,8 @@ module qerv_tb;
   reg [1023:0] tracefile;
   reg [31:0]   tohost = 32'hFFFF_FFFF;
   reg [63:0]   n_fetch = 64'd0;
+  reg [29:0]   n_cmo = 30'd0;
+  wire         cmo = dbus_cmo & dbus_cyc & !ibus_cyc;   // as soc_top's m_cmo
 
   initial begin
     if (!$value$plusargs("tohost=%h", tohost)) tohost = 32'hFFFF_FFFF;
@@ -182,7 +192,12 @@ module qerv_tb;
         if (mem_adr == HALT_ADR) finish("HALT", mem_dat);
         if (mem_adr == tohost) finish("TOHOST", mem_dat);
       end
-      if (mem_ack & !mem_we & dbus_cyc & !fetch_ack & f) $fwrite(f, "R %08h %1h %0d\n", mem_adr, mem_sel, cycle);
+      if (mem_ack & cmo) begin
+        n_cmo = n_cmo + 30'd1;
+        ram.mem[(CMO_ADR % MEMSIZE) >> 2]       = mem_adr & ~32'd3;
+        ram.mem[((CMO_ADR + 4) % MEMSIZE) >> 2] = {n_cmo, dbus_cmo_op};
+        if (f) $fwrite(f, "C %08h %0d %0d\n", mem_adr, dbus_cmo_op, cycle);
+      end else if (mem_ack & !mem_we & dbus_cyc & !fetch_ack & f) $fwrite(f, "R %08h %1h %0d\n", mem_adr, mem_sel, cycle);
     end
     if (cycle > TIMEOUT) finish("TIMEOUT", fetch_adr);
   end

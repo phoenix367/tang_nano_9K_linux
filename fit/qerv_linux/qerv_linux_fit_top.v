@@ -28,7 +28,8 @@ module qerv_linux_fit_top (
 
   wire [31:0] ibus_adr, dbus_adr, dbus_dat;
   wire [ 3:0] dbus_sel;
-  wire        ibus_cyc, dbus_we, dbus_cyc;
+  wire        ibus_cyc, dbus_we, dbus_cyc, dbus_cmo;
+  wire [ 1:0] dbus_cmo_op;
 
   qerv_cpu #(.W(`SERV_W), .RESET_PC(32'h0), .SMODE(`SERV_SMODE)) cpu (
       .i_clk      (clk),
@@ -45,13 +46,16 @@ module qerv_linux_fit_top (
       .o_dbus_sel (dbus_sel),
       .o_dbus_we  (dbus_we),
       .o_dbus_cyc (dbus_cyc),
+      .o_dbus_cmo (dbus_cmo),
+      .o_dbus_cmo_op(dbus_cmo_op),
       .i_dbus_rdt ({lfsr[15:0], lfsr[63:48]}),
       .i_dbus_ack (lfsr[33])
   );
 
   reg fold;
   always @(posedge clk)
-    fold <= ^{ibus_adr, ibus_cyc, dbus_adr, dbus_dat, dbus_sel, dbus_we, dbus_cyc};
+    fold <= ^{ibus_adr, ibus_cyc, dbus_adr, dbus_dat, dbus_sel, dbus_we, dbus_cyc, dbus_cmo,
+              dbus_cmo_op};
 
   assign led = fold;
 

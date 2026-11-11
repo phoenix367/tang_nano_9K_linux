@@ -18,7 +18,8 @@
 //
 // Faults are reported with the core's bus ack: o_ibus_fault (instruction page fault) or
 // o_dbus_fault + o_dbus_fault_we (load page fault / store-AMO page fault). LR is a load, SC
-// and the other AMOs are stores.
+// and the other AMOs are stores. A cache-block operation (Zicbom, i_dbus_cmo) is checked like
+// a load (it needs R; no D bit) and faults as a store, as the spec has it.
 //
 // sfence.vma (any operands) clears the whole TLB by sweeping it (2^TLB_L2 cycles); requests
 // wait meanwhile.
@@ -67,6 +68,8 @@ module sv32_mmu #(
     input  wire        i_dbus_cyc,
     input  wire        i_dbus_amo,
     input  wire [ 4:0] i_dbus_amo_op,
+    input  wire        i_dbus_cmo,
+    input  wire [ 1:0] i_dbus_cmo_op,
     output wire [31:0] o_dbus_rdt,
     output wire        o_dbus_ack,
     output wire        o_dbus_fault,
@@ -79,6 +82,8 @@ module sv32_mmu #(
     output wire        o_mbus_cyc,
     output wire        o_mbus_amo,
     output wire [ 4:0] o_mbus_amo_op,
+    output wire        o_mbus_cmo,
+    output wire [ 1:0] o_mbus_cmo_op,
     output wire        o_mbus_fetch,         // the access on the bus is a fetch (debug)
     input  wire [31:0] i_mbus_rdt,
     input  wire        i_mbus_ack
@@ -245,6 +250,8 @@ module sv32_mmu #(
   assign o_mbus_we     = core & !i_ibus_sel & i_dbus_we;   // dbus_we/amo are stale on fetches
   assign o_mbus_amo    = core & !i_ibus_sel & i_dbus_amo;
   assign o_mbus_amo_op = i_dbus_amo_op;
+  assign o_mbus_cmo    = core & !i_ibus_sel & i_dbus_cmo;
+  assign o_mbus_cmo_op = i_dbus_cmo_op;
   assign o_mbus_fetch  = core & i_ibus_cyc;
 
   // ---------------------------------------------------------------- core buses
@@ -255,7 +262,7 @@ module sv32_mmu #(
   assign o_dbus_rdt      = i_mbus_rdt;
   assign o_dbus_ack      = (i_mbus_ack & core & i_dbus_cyc) | (fault & req_d);
   assign o_dbus_fault    = fault & req_d;
-  assign o_dbus_fault_we = is_st;
+  assign o_dbus_fault_we = is_st | (req_d & i_dbus_cmo);
 
 endmodule
 

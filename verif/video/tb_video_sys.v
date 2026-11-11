@@ -41,7 +41,7 @@ module tb_video_sys;
 
   l1_cache #(.LINES(8)) cache (
       .i_clk(sclk), .i_rst(rst), .i_adr(adr), .i_dat(dat), .i_sel(sel), .i_we(we), .i_cyc(cyc),
-      .i_unc(1'b0), .o_rdt(rdt), .o_ack(ack),
+      .i_unc(1'b0), .i_cmo(1'b0), .i_cmo_op(2'b00), .o_rdt(rdt), .o_ack(ack),
       .o_req(c_req), .o_req_we(c_we), .o_req_adr(c_adr), .i_gnt(c_gnt),
       .o_wdata(c_wdata), .o_wmask(c_wmask), .i_rvalid(c_rvalid), .i_rdata(c_rdata),
       .o_hits(hits), .o_misses(misses), .o_writebacks(wbs));
