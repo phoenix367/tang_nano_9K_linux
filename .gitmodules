@@ -3,7 +3,8 @@
 	url = https://github.com/splinedrive/kianRiscV.git
 [submodule "external/serv"]
 	path = external/serv
-	url = https://github.com/olofk/serv.git
+	url = https://github.com/phoenix367/sparrow-serv.git
+	branch = qerv-linux
 [submodule "external/mdu"]
 	path = external/mdu
 	url = https://github.com/zeeshanrafique23/mdu.git

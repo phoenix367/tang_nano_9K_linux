@@ -616,8 +616,11 @@ fixed under `LINUX=1`.
   partly decoded (`serv_decode.v`), so e.g. `mhartid` aliases another CSR. It can't run
   Linux as-is.
 
-  **Our fork:** `external/serv` is on the local branch `qerv-linux`, not yet pushed; it moves
-  to a GitHub fork once the user creates one. It adds `parameter LINUX`, and `LINUX=0` is
+  **Our fork:** `external/serv` is Sparrow-SERV, branch `qerv-linux` of
+  `github.com/phoenix367/sparrow-serv` (its README describes the changes). In the submodule,
+  `origin` is the fork (fetch over HTTPS, push over SSH) and `upstream` is olofk/serv. A
+  change there is committed and pushed in the fork first, then the new submodule pointer is
+  committed here. It adds `parameter LINUX`, and `LINUX=0` is
   cycle-identical to upstream (`perf/serv_cpi` results unchanged). `LINUX=1` adds:
   - A: one dbus transaction with `o_dbus_amo`/`o_dbus_amo_op`, executed by `amo_unit`.
   - U-mode, with mstatus MPP (00/11) and MPIE readable and writable.
@@ -629,7 +632,8 @@ fixed under `LINUX=1`.
   The changed files are `serv_decode.v`, `serv_csr.v`, `serv_top.v` and `serv_rf_top.v`;
   `serv_state.v` also exports `o_ibus_sel` (ibus_cyc without the reset gating), and
   `serv_csr.v` (SMODE) has SEIP and `o_xlate`.
-  Still absent: illegal-instruction traps, external IRQ, S-mode and MMU (stage 2).
+  `SMODE=1` adds S-mode and the MMU hooks (stage 2, above). Still absent:
+  illegal-instruction traps, the M external interrupt, MPRV.
 
 Linux requires at least RV32IMA. For a normal kernel it also needs an SV32 MMU and
 S-mode/M-mode, with OpenSBI or an equivalent M-mode shim. A no-MMU kernel saves logic but
