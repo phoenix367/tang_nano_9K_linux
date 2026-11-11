@@ -61,6 +61,22 @@ if it exists.
     both) never calibrates there, and the CPU hangs on its first PSRAM access. 54–77.1 and
     84–135 MHz calibrate. `fpga/probe/run.sh TAG IDIV FBDIV ODIV` builds a CPU-less probe
     (rPLL + IP + a 27 MHz beacon UART printing lock/calib) in ~15 s and loads it.
+    - Likely cause: the netlist was generated for another clock. Its `.ipc` says
+      `MEMORY_CLK=135`, `SHIFT_DELAY=152`, and we run it at 84 MHz.
+    - The generator picks `SHIFT_DELAY` per clock: 0 at 60 MHz, 192 at 160 MHz in other
+      projects' configs.
+    - An element14 article (shabaz, 2026-10) generated the IP for 81 MHz and passed a
+      full-memory test of both channels at 81 MHz (one board, second-hand).
+    - So a netlist generated for our clock may well calibrate anywhere; that needs a
+      Gowin install whose IP generation works.
+  - **Replacement candidate:** `rtl/psram/hyperram_x16.v` (doc/psram_controller.md). It runs
+    both dies in lockstep as one 16-bit bus at CK = 42 MHz, without calibration. The CPU-less
+    probe `fpga/probe_psram16/run.sh` passes a full 8 MB test on both dies at every CK phase
+    from 22.5 to 157.5 degrees. Not in the SoC yet. Facts the board settled:
+    - CR0 is written at `CA[24]`; a write at `CA[16]` is ignored.
+    - Die 0's true clock is `O_psram_ck[0]`, on two single-ended pins (IOL8A/IOL7A, not a
+      differential pair). Die 1's is `O_psram_ck_n[1]`, on the IOL23A/B pair.
+    - Simulation: `verif/psram16/run.sh` (it needs Gowin's `prim_sim.v`).
   - **PSRAM IP:** `fpga/src/psram_memory_interface_hs_2ch/` is the ov7670 project's
     generated netlist, copied unchanged (135 MHz settings, module `Video_frame_buffer`).
     IP generation in this machine's IDE fails on the license.
@@ -103,6 +119,22 @@ if it exists.
     `ROM_INPUT=<records>` overrides that (`sim_main.cpp` `+rom_input`: records of
     {u32 length, bytes}, one per `> ` prompt). `sim/soc/test_bootrom.py` (~1 min) checks
     every command.
+- **Docker:** `docker/bootstrap.sh` builds the image `tang9k-linux-build` (Ubuntu 24.04,
+  ~1.8 GB, ~3 min) and writes `docker/.env` (git-ignored). `docker/run.sh <cmd>` runs a
+  command in it. Mounts: the repo at `/work`; the Gowin install read-only at `/opt/gowin`
+  (`GOWIN_PATH`); `WORK_DIR` at `/build` (`WORK`); Buildroot's download cache at `/dl`
+  (`BR2_DL_DIR`, shared with the host's `$WORK/buildroot/dl`). USB and ttyUSB are passed
+  through.
+  - The container's `WORK` is a separate host directory
+    (`/mnt/data/build/tang9k_linux/docker`): Buildroot's host tools are linked against the
+    libc they were built with, so host and container trees must not mix. The container's
+    kernel images land in `docker/images-tang9k-mmu/`, not the host's.
+  - Checked in the container: `scripts/ci.sh all` passes, `fpga/build.sh` builds the
+    same 42.126 MHz bitstream (gw_sh reaches the licence server through the default
+    network), `CONFIG=mmu sw/build.sh` builds from scratch.
+  - `scripts/gw_run.sh` preloads `libfreetype.so.6`, not `libfreetype.so`. The unversioned
+    name exists only with `libfreetype-dev`, and without the preload `gw_sh` dies on
+    Gowin's old bundled FreeType.
 - **CI:** `scripts/ci.sh cpu|units|soc|all` runs the checks that need no Gowin tools, board
   or kernel: the CPU tests and riscv-tests, the CPI check, the unit benches (not
   `verif/video/run.sh`, which needs Gowin's primitive models), and the SoC model (boot ROM

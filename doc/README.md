@@ -47,6 +47,7 @@ graph LR
 | [stage2_plan.md](stage2_plan.md) | Stage 2, SV32 Linux in S-mode: the privilege modes, the MMU, the SBI shim, boot-time work |
 | [video_plan.md](video_plan.md) | HDMI: the video controller, the PSRAM arbiter, the boot splash, the text console |
 | [peripherals.md](peripherals.md) | I2C and the microSD card: drivers, hardware CRC, measurements, the open write problem |
+| [psram_controller.md](psram_controller.md) | A self-written 16-bit PSRAM controller to replace the Gowin IP: design, what the board showed (pins, CR0, phase window), the probe, what SoC integration needs |
 
 Elsewhere in the repository:
 - `README.md`: what the project is, how to build, run and flash.

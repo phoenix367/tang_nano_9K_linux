@@ -10,9 +10,12 @@ misses its constraint or has negative slack, so the result can gate a load or a 
 import hashlib, html, os, re, sys, time
 
 d = sys.argv[1] if len(sys.argv) > 1 else "fpga/impl/pnr"
-fs = os.path.join(d, "tang9k_soc.fs")
-tr = os.path.join(d, "tang9k_soc_tr_content.html")
-rpt = os.path.join(d, "tang9k_soc.rpt.txt")
+# the project's name: tang9k_soc for the board build, anything for a probe
+fss = sorted(f for f in os.listdir(d) if f.endswith(".fs")) if os.path.isdir(d) else []
+name = fss[0][:-3] if fss else "tang9k_soc"
+fs = os.path.join(d, name + ".fs")
+tr = os.path.join(d, name + "_tr_content.html")
+rpt = os.path.join(d, name + ".rpt.txt")
 for f in (fs, tr):
     if not os.path.exists(f):
         sys.exit(f"{f} not found: build first (SMODE=1 VIDEO=1 fpga/build.sh)")
@@ -56,6 +59,11 @@ if paths:
     print("\nworst setup paths (slack ns, from -> to):")
     for n, sl, a, b in paths[:4]:
         print(f"  {sl:>7s}  {a} -> {b}")
+    # Gowin's TNS table can leave a generated clock out (a phase-shifted rPLL output did), so
+    # a negative slack in the path list counts too
+    if any(float(sl) < 0 for n, sl, a, b in paths):
+        bad = True
+        print("  NEGATIVE setup slack in the path list")
 
 # The TNS table above can read 0 for hold while the hold path list has negative slacks (the
 # PSRAM IP's calibration flag into its input deserializers, a known IP-internal class that

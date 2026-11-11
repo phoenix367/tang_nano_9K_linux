@@ -12,3 +12,5 @@ fpga/probe/build/
 fpga/probe_hdmi/build/
 sim/soc/results/*.rom_test.log
 __pycache__/
+docker/.env
+fpga/probe_psram16/build/
