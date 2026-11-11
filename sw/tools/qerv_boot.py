@@ -33,8 +33,9 @@ import time
 
 import serial
 
-IMAGES = "/mnt/data/build/tang9k_linux/images-tang9k"
-IMAGES_MMU = "/mnt/data/build/tang9k_linux/images-tang9k-mmu"
+WORK = os.environ.get("WORK", "/mnt/data/build/tang9k_linux")   # as sw/build.sh
+IMAGES = f"{WORK}/images-tang9k"
+IMAGES_MMU = f"{WORK}/images-tang9k-mmu"
 RAM_BASE, DTB_ADDR = 0x80000000, 0x807FF000
 FLASH_BASE = 0x20000000
 FB_BASE, FB_UNC, FB_W, FB_H = 0x80700000, 0x90700000, 640, 480   # doc/video_plan.md
