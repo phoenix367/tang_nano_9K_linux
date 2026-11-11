@@ -24,7 +24,7 @@ jobs:
         # soc: the Verilator SoC model (boot ROM commands, bare-metal cbo_test)
         group: [cpu, units, soc]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # external/sparrow-serv (the CPU core), external/mdu, external/riscv-tests and
           # its env submodule
@@ -47,7 +47,7 @@ jobs:
 
       - name: Keep the logs of a failed run
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: logs-${{ matrix.group }}
           path: |
