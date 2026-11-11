@@ -87,7 +87,9 @@ sw/tools/qerv_boot.py --bitstream <fs> --linux --mmu --timeout 120 --log <log> -
    ```
    sw/tools/flash_linux.sh mmu > <log> 2>&1
    ```
-   - It takes about 1–1.5 min for 3.4 MB. `SPLASH=<image>` sets the boot splash picture.
+   - It takes about 1–1.5 min for 3.4 MB when the bridge works. `SPLASH=<image>` sets the
+     boot splash picture. `JTAG_FREQ` sets the cable's TCK (default 2.5MHz; slower didn't
+     cure the stalls).
      For the no-MMU kernel, run `flash_linux.sh nommu`; its image is
      `images-tang9k/flash.bin`.
    - The Gowin bridge sometimes stalls. The script's watchdog stops an attempt whose
@@ -95,10 +97,19 @@ sw/tools/qerv_boot.py --bitstream <fs> --linux --mmu --timeout 120 --log <log> -
      Don't kill the script from outside: that leaves `programmer_cli` holding the cable and
      the flash half-written.
    - Success is exit 0 with `Program flash finished` in the log.
-   - On `flash write failed after 3 attempts`, the bridge is wedged. Ask the user to unplug
-     and replug the board's USB (that cleared it before), then run again. Tell them the SPI
-     flash is now erased or partial, so the board boots no Linux until a write succeeds. The
-     boot ROM still starts and a RAM boot still works.
+   - On `flash write failed after 3 attempts`, the bridge is wedged. Tell the user the SPI
+     flash is now erased or partial, so the board boots no Linux until a write succeeds.
+     The boot ROM still starts and a RAM boot still works. Ask them to unplug and replug
+     the board's USB, then run again right away, before anything opens `/dev/ttyUSB1`
+     (the BL702 turns JTAG off while its UART is in use; that a fresh plug helps is a
+     guess, but it costs nothing).
+   - If that fails too, stop retrying the bridge: on 2026-11-11 it failed about 15 times in
+     a row, at any TCK. Offer the slow path that worked, over the same cable:
+     ```
+     openFPGALoader -b tangnano9k --external-flash -f /mnt/data/build/tang9k_linux/images-tang9k-mmu/flash.bin
+     ```
+     It takes ~77 min for 3.4 MB, so run it in the background and say so. It erases the
+     FPGA's SRAM too.
 3. **Verify.** Afterwards the FPGA's SRAM holds Gowin's bridge, not the SoC.
    - If the internal flash holds the matching bitstream (or you write it now, after this,
      with `upload-bitstream`), boot the power-up path:

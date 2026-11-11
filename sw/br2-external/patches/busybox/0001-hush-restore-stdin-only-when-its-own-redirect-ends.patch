@@ -1,0 +1,138 @@
+From: Claude Opus 5.5 <noreply@anthropic.com>
+Date: Wed, 11 Nov 2026 20:20:00 +0400
+Subject: [PATCH] hush: restore stdin only when the redirect that moved it ends
+
+When a redirect targets fd 0 while the shell reads its own input from fd 0
+(an interactive shell, or a script on stdin), move_HFILEs_on_redirect()
+moves G.HFILE_stdin to another fd instead of saving it. restore_redirects()
+then moved it back to fd 0 at the end of *every* command it was called
+for, including builtins and NOFORK applets run inside a redirected group.
+So in
+
+	{ read a; read b; } <FILE
+	while read r; do ...; done <FILE
+
+fd 0 went back to the shell's input after the first builtin, and the
+second "read" read the terminal (or the rest of the script) instead of
+FILE: an interactive while-read loop over a file hangs. Forked commands
+were not affected, and neither are scripts run from a file.
+
+Record the move as a squirrel entry of the redirect that made it, and
+move stdin back only when that redirect is undone. "read r <FILE" at the
+prompt still gets stdin back right after the read (redir_stdin1). "exec
+<FILE" (sqp == ERR_PTR) records nothing, so its redirect now stays in
+effect instead of being undone by the next builtin.
+
+Testcase: hush-redir/redir_stdin2.
+
+Upstream-Status: Pending (found on the Tang Nano 9K, busybox 1.38.0)
+---
+--- a/shell/hush.c
++++ b/shell/hush.c
+@@ -8447,7 +8447,10 @@
+ 	int moved_to;
+ 	/* moved_to = n: fd was moved to n; restore back to orig_fd after redir */
+ 	/* moved_to = -1: fd was opened by redirect; close orig_fd after redir */
++	/* moved_to = SQUIRREL_HFILE_STDIN: this redirect moved G.HFILE_stdin
++	 * away from fd 0; move it back after redir */
+ };
++#define SQUIRREL_HFILE_STDIN (-2)
+ 
+ static struct squirrel *append_squirrel(struct squirrel *sq, int i, int orig, int moved)
+ {
+@@ -8557,8 +8560,26 @@
+ 	}
+ 
+ 	/* If this one of script's fds? */
+-	if (move_HFILEs_on_redirect(fd, avoid_fd))
++	if (move_HFILEs_on_redirect(fd, avoid_fd)) {
++		/* If it was our stdin, the redirect that moved it (and only that
++		 * one) moves it back to fd 0 when it is undone. Not the end of
++		 * every command run while it is in effect: in
++		 * "{ read a; read b; } <FILE", restoring stdin after "read a"
++		 * would make "read b" read the terminal.
++		 * "exec <FILE" (sqp == ERR_PTR) is meant to stay.
++		 */
++		if (fd == STDIN_FILENO && sqp != ERR_PTR
++		 && G.HFILE_stdin && G.HFILE_stdin->fd > STDIN_FILENO
++		) {
++			struct squirrel *sq = *sqp;
++			int i = 0;
++			if (sq)
++				while (sq[i].orig_fd >= 0)
++					i++;
++			*sqp = append_squirrel(sq, i, STDIN_FILENO, SQUIRREL_HFILE_STDIN);
++		}
+ 		return 1; /* yes. "we closed fd" (actually moved it) */
++	}
+ 
+ 	/* Are we called for "exec 3>FILE"? Came through
+ 	 * redirect_and_varexp_helper(squirrel=ERR_PTR) -> setup_redirects(ERR_PTR)
+@@ -8604,6 +8625,22 @@
+ 				/* We simply die on error */
+ 				debug_printf_redir("restoring redirected fd from %d to %d\n", sq[i].moved_to, sq[i].orig_fd);
+ 				xmove_fd(sq[i].moved_to, sq[i].orig_fd);
++			} else if (sq[i].moved_to == SQUIRREL_HFILE_STDIN) {
++				/* Testcase: interactive "read r <FILE; echo $r; read r; echo $r".
++				 * Redirect moves ->fd to e.g. 10,
++				 * and it is not restored as other fds (we do not restore
++				 * script fds after redirects, we just use new, "moved" fds).
++				 * However for stdin, show_prompt_and_get_stdin() -> read_line_input(),
++				 * and read builtin, depend on fd == STDIN_FILENO.
++				 * We compare > STDIN, not == STDIN, since hfgetc()
++				 * closes fd and sets ->fd to -1 if EOF is reached.
++				 * Testcase: echo 'pwd' | hush
++				 */
++				if (G.HFILE_stdin && G.HFILE_stdin->fd > STDIN_FILENO) {
++					debug_printf_redir("restoring %d to stdin\n", G.HFILE_stdin->fd);
++					xmove_fd(G.HFILE_stdin->fd, STDIN_FILENO);
++					G.HFILE_stdin->fd = STDIN_FILENO;
++				}
+ 			} else {
+ 				/* cmd1 9>FILE; cmd2_should_see_fd9_closed */
+ 				debug_printf_redir("restoring redirected fd %d: closing it\n", sq[i].orig_fd);
+@@ -8612,24 +8649,6 @@
+ 		}
+ 		free(sq);
+ 	}
+-	if (G.HFILE_stdin
+-	 && G.HFILE_stdin->fd > STDIN_FILENO
+-	/* we compare > STDIN, not == STDIN, since hfgetc()
+-	 * closes fd and sets ->fd to -1 if EOF is reached.
+-	 * Testcase: echo 'pwd' | hush
+-	 */
+-	) {
+-		/* Testcase: interactive "read r <FILE; echo $r; read r; echo $r".
+-		 * Redirect moves ->fd to e.g. 10,
+-		 * and it is not restored above (we do not restore script fds
+-		 * after redirects, we just use new, "moved" fds).
+-		 * However for stdin, show_prompt_and_get_stdin() -> read_line_input(),
+-		 * and read builtin, depend on fd == STDIN_FILENO.
+-		 */
+-		debug_printf_redir("restoring %d to stdin\n", G.HFILE_stdin->fd);
+-		xmove_fd(G.HFILE_stdin->fd, STDIN_FILENO);
+-		G.HFILE_stdin->fd = STDIN_FILENO;
+-	}
+ 
+ 	/* If moved, G_interactive_fd stays on new fd, not restoring it */
+ }
+--- /dev/null
++++ b/shell/hush_test/hush-redir/redir_stdin2.tests
+@@ -0,0 +1,10 @@
++#Testing that a builtin inside a redirected group does not get the shell's
++#own stdin (here, the script) back before the group ends
++echo 'l1
++l2
++l3' >redir_stdin2.tmp
++echo '{ read a; read b; echo "$a $b"; } <redir_stdin2.tmp
++n=0; while read r; do n=$((n+1)); done <redir_stdin2.tmp; echo $n
++echo Script continues' | $THIS_SH
++rm redir_stdin2.tmp
++echo Ok:$?
+--- /dev/null
++++ b/shell/hush_test/hush-redir/redir_stdin2.right
+@@ -0,0 +1,4 @@
++l1 l2
++3
++Script continues
++Ok:0

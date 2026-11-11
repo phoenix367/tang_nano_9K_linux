@@ -168,8 +168,9 @@ if it exists.
     erases the SRAM configuration first.
   - **Writing the external flash:** `sw/tools/flash_linux.sh [mmu|nommu]` (~1 min) runs
     mkflash and Gowin `programmer_cli --run 38` (exFlash C Bin through the GAO bridge,
-    `--cable-index 4` = "USB Debugger A"). Don't use openFPGALoader `--external-flash -f`
-    for it: it bit-bangs SPI over the 6 MHz JTAG, ~1 h. Three gotchas, all handled by the
+    `--cable-index 4` = "USB Debugger A"). The fallback when the bridge keeps failing is
+    `openFPGALoader -b tangnano9k --external-flash -f <flash.bin>`: it bit-bangs SPI over
+    JTAG at ~0.75 KB/s (3.4 MB in 77 min) but has not failed. Gotchas, all handled by the
     script:
     - `programmer_cli` cannot open the JTAG channel while the kernel's `ftdi_sio` holds
       it (`/dev/ttyUSB0`). openFPGALoader re-attaches it on exit, so the script detaches
@@ -192,6 +193,18 @@ if it exists.
       end the script. The SRAM erase is bounded too (30 s).
     - It also writes the boot splash: `sw/tools/mksplash.py` (default picture, or
       `SPLASH=<image>`), then `sw/mkflash.py --splash`.
+    - **The bridge stopped working altogether on 2026-11-11 evening:** about 15 attempts
+      over 40 min, through several USB replugs, all stalled: loading the bridge, at the
+      first sector erase (0x0003F020), or partway through programming (5–91%). During one
+      write the PC's xHCI controller for that bus died ("HC died", it came back later).
+      `JTAG_FREQ=1.1MHz` (the script's TCK; default 2.5MHz) didn't help: no faster, no
+      fewer stalls. openFPGALoader then wrote the same file through the same cable without
+      a hitch. So the failing part is the high-rate bridge path on the board's BL702
+      USB-JTAG chip, not the flash or the image. Gowin support is quoted (Hackaday, "Tang
+      Nano 9K Rant") as not recommending flash writes through the Tang Nano's USB-JTAG
+      chip, and Sipeed's FAQ says the BL702 disables JTAG while its UART is in use (a replug
+      clears it). Every failed run followed heavy UART use; whether writing right after a
+      replug, before opening `/dev/ttyUSB1`, avoids the stalls is untested.
   - **Internal flash (persistent bitstream):** `openFPGALoader -b tangnano9k -f <fs>`, ~12 s
     with a CRC check. `qerv_boot.py --reconfig` reloads it (openFPGALoader -r), as at
     power-on.
@@ -202,24 +215,23 @@ if it exists.
       Earlier the same day: `tang9k_soc_hr16.fs` (the same RTL, placed against an
       over-constrained 48 MHz) and before it `tang9k_soc_cbo.fs` (the same system with the
       Gowin PSRAM IP), which stays as the fallback.
-    - SPI flash (written 2026-11-11, 19:54): `/mnt/data/build/tang9k_linux/flash_mmu_greet.bin`
-      (3,441,268 B: Image 3,403,420, DTB 2,871, S-mode flag, splash 29,300). The Zicbom
-      system plus the shell greeting and qervcon's Unicode-map fix (kernel #5, 19:31). It
-      runs on `tang9k_soc_unc.fs` and `tang9k_soc_cbo.fs` alike (the PSRAM change added no
-      device). Earlier images: `flash_mmu_cbo.bin` (the same system without the greeting),
+    - SPI flash (written 2026-11-11, 21:37–22:54, with openFPGALoader after the bridge
+      failed): `/mnt/data/build/tang9k_linux/flash_mmu_hush.bin` (3,441,268 B, md5
+      babf77ae…: Image 3,403,420, DTB 2,871, S-mode flag, splash 29,300). Kernel #7
+      (20:21): the greeting system plus the hush redirection fix. The boot ROM's hash of the
+      flash matches the file. It runs on `tang9k_soc_unc.fs` and `tang9k_soc_cbo.fs` alike
+      (the PSRAM change added no device). Earlier images: `flash_mmu_greet.bin` (the same
+      without the hush fix, kernel #5), `flash_mmu_cbo.bin` (without the greeting),
       `flash_mmu_irq.bin` (with `tang9k_soc_irq.fs`) and `flash_mmu_pre_video.bin`.
-      - That write needed 3 attempts (the bridge stalled loading, then at the first sector
-        erase with status 0x0003F020), after an earlier run of 3 failed attempts that a USB
-        replug cleared.
     - Flash a kernel and a bitstream together when the devices change: a kernel's DT expects
       the devices of its own bitstream (text buffer, I2C, SPI).
     - At power-up the splash is on screen from the boot ROM on. Linux autoboots, and when its
       shell starts the screen switches to the text console and the greeting: `Run /init`
-      20.1 s and `~ #` 27.3 s after the ROM's prompt. Without the greeting it was 19.9 /
+      20.0 s and `~ #` 27.1 s after the ROM's prompt. Without the greeting it was 19.9 /
       24.8 s (with the IP: 19.8 / 24.6 s; the irq system: 16.0 / 19.3 s, before I2C + SD
       init and the larger Image).
   - **Checking the flash:** `qerv_boot.py --hash-flash flash.bin` has the boot ROM hash the
-    flash window (2.7 MB in ~18 s). `--flash-boot` boots it, and `--autoboot` loads the
+    flash window (3.4 MB in ~20 s). `--flash-boot` boots it, and `--autoboot` loads the
     bitstream and sends nothing (the power-up path).
   - The console UART is `/dev/ttyUSB1` (interface 1); JTAG is interface 0. It runs at 1 Mbaud
     8N1, fixed in the FPGA.
@@ -404,17 +416,32 @@ if it exists.
       - It costs ~2 s of the shell prompt (21.2 s after `B` instead of 19.1).
       - It forks nothing: each fork + exec of busybox costs most of a second on the board
         (a `$(cat)` and a `$(sed)` made it 3.3 s).
-      - It reads only 90 bytes of `/proc/meminfo`: busybox's `read` takes ~1.5 ms per byte
-        there (a `ppoll` with signal masking per byte).
+      - It reads only 90 bytes of `/proc/meminfo`: busybox's `read` takes ~1.5–3 ms per
+        byte there (two `sigprocmask`, a `ppoll` and a `read` per byte; a `while read` over
+        all of `/proc/meminfo`, 38 lines, takes ~4 s).
       - The VT shows bright colours as foreground only, so a cell (two pixels) holds at most
         one bright pixel; the picture has its own blue panel.
       - `/dev/vcsa1` dumped with `od -v -b` shows what the HDMI screen holds (glyph and
         attribute per cell).
-    - **busybox 1.38.0 `read` from a file (open):** at the interactive prompt, a second
-      `read` from a regular file on the same redirection (`while read ...; done < file`,
-      `{ read a; read b; } < file`) blocks; with `-t` it times out, in a background job the
-      loop ends after one line. From a pipe it works, and the same loop worked in the login
-      profile. Not investigated further.
+    - **The shell is busybox hush** (`CONFIG_SH_IS_HUSH`; ash isn't built). `echo`,
+      `printf` and `test` run as NOFORK applets.
+    - **hush redirection fix** (`sw/br2-external/patches/busybox/0001-hush-restore-stdin-
+      only-when-its-own-redirect-ends.patch`, both images):
+      - The bug: when a redirect targets fd 0 while hush reads its own input from fd 0 (an
+        interactive shell, or a script on stdin), hush moves its input aside instead of
+        saving it. `restore_redirects()` moved it back after *every* builtin or NOFORK
+        applet, also inside a redirected group or loop.
+      - So in `{ read a; read b; } < file` and `while read ...; done < file` at the prompt,
+        the second `read` read the terminal: the loop hung. Forked commands, `sh -c` and
+        scripts run from files were not affected (that's why the login profile worked).
+      - The fix: the redirect that moved the input records it in its own save list, and only
+        undoing that redirect moves it back. `exec <FILE` now stays in effect.
+      - It adds hush's regression test `hush-redir/redir_stdin2` (fails before, passes
+        after). hush's suite is otherwise unchanged: 387 ok, 17 failing as before on the
+        host (`signal_read1` is flaky either way).
+      - Reproducing on the host: build the board's busybox source natively (`make oldconfig`
+        with its `.config`, ~10 s) and run `busybox hush` on a pty, or pipe the script in:
+        `printf '{ read a; read b; echo "[$a][$b]"; } <FILE\n' | busybox hush`.
     - **Kernel video drivers** (patches in `sw/br2-external/patches/linux/`):
       - `0003` qervfb: `/dev/fb0` with Y-wrap panning (YOFF).
       - `0004` qervcon (`CONFIG_QERV_CONSOLE`, DT `qerv,tang9k-text`): the text console,

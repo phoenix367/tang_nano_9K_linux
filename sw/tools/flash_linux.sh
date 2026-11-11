@@ -12,12 +12,15 @@
 #
 # Env: GOWIN_PATH (default /mnt/data/Gowin_V1.9.12.02_SP2_linux),
 #      WORK (default /mnt/data/build/tang9k_linux), SPLASH (boot splash picture; default: the
-#      one sw/tools/mksplash.py draws).
+#      one sw/tools/mksplash.py draws), JTAG_FREQ (the cable's TCK for the bridge, default
+#      2.5MHz, programmer_cli's own default; it also takes 2MHz, 1.5MHz, 1.1MHz, 0.9MHz,
+#      0.75MHz, 0.5MHz, ...: slower writes take longer, ~70 KB/s at 2.5MHz).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 GOWIN_PATH="${GOWIN_PATH:-/mnt/data/Gowin_V1.9.12.02_SP2_linux}"
 WORK="${WORK:-/mnt/data/build/tang9k_linux}"
+JTAG_FREQ="${JTAG_FREQ:-2.5MHz}"
 case "${1:-mmu}" in
   mmu)   IMG="$WORK/images-tang9k-mmu" DTB=tang9k-mmu.dtb OPT=--smode ;;
   nommu) IMG="$WORK/images-tang9k" DTB=tang9k.dtb OPT= ;;
@@ -63,9 +66,11 @@ for attempt in 1 2 3; do
   LOC=$(./programmer_cli --scan-cables 2>&1 | sed -n 's#.*Cable found:  USB Debugger A/0/\([0-9]*\)/.*#\1#p' | head -1)
   # SRAM erase; it can hang too (seen after the board was power-cycled), so bound it
   timeout -s KILL 30 ./programmer_cli --device GW1NR-9C --run 24 --cable-index 4 \
-      --location "${LOC:-0}" > /dev/null 2>&1 || echo "attempt $attempt: SRAM erase failed or hung"
+      --location "${LOC:-0}" --frequency "$JTAG_FREQ" > /dev/null 2>&1 \
+      || echo "attempt $attempt: SRAM erase failed or hung"
+  echo "attempt $attempt: writing at TCK $JTAG_FREQ"
   ./programmer_cli --device GW1NR-9C --run 38 --mcuFile "$IMG/flash.bin" --spiaddr 0x000000 \
-      --cable-index 4 --location "${LOC:-0}" > "$LOG" 2>&1 &
+      --cable-index 4 --location "${LOC:-0}" --frequency "$JTAG_FREQ" > "$LOG" 2>&1 &
   PID=$!
   stall=0 last=
   while kill -0 "$PID" 2>/dev/null; do
