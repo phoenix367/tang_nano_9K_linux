@@ -31,10 +31,23 @@ jobs:
           submodules: recursive
 
       - name: Install simulators and the RISC-V GCC
+        # apt exits 100 when any package source fails, and the runner image carries extra
+        # third-party sources: this step failed that way on two runs in a row (2026-11-11)
+        # while the same packages installed in a clean ubuntu:24.04. So retry the update and
+        # don't stop on it (the Ubuntu archive lists still update), retry downloads, and if
+        # the install fails, update again and retry. The version checks below catch a
+        # missing tool.
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            iverilog verilator gcc-riscv64-unknown-elf
+          for i in 1 2 3; do
+            sudo apt-get update && break
+            echo "apt-get update failed (attempt $i); retrying"; sleep 15
+          done
+          for i in 1 2 3; do
+            sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
+              iverilog verilator gcc-riscv64-unknown-elf && break
+            echo "apt-get install failed (attempt $i); updating and retrying"; sleep 15
+            sudo apt-get update || true
+          done
           iverilog -V 2>&1 | head -1
           verilator --version
           riscv64-unknown-elf-gcc --version | head -1
