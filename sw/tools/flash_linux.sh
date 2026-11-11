@@ -47,8 +47,9 @@ cd "$GOWIN_PATH/Programmer/bin"
 # The GAO-bridge write takes ~1 min, but now and then it hangs at the first sector erase
 # ("Erasing sector at 0... 0%"; 5 of 12 runs). The hung runs reported bridge status
 # 0x0003F020, the good ones 0x0001F020; once it hangs, retries in the same state hang too, and
-# reconfiguring the FPGA from its internal flash cleared it. So a watchdog stops a stuck
-# attempt after 60 s, and the next attempt first reconfigures (openFPGALoader -r), then
+# reconfiguring the FPGA from its internal flash cleared it. It can also stop partway through
+# programming (once at 43%, for 45 min). So a watchdog stops an attempt whose progress line has
+# not changed for 60 s, and the next attempt first reconfigures (openFPGALoader -r), then
 # detaches ftdi_sio again and rescans the cable; each attempt starts by erasing the SRAM.
 LOG=$(mktemp)
 trap 'rm -f "$LOG"' EXIT
@@ -66,13 +67,16 @@ for attempt in 1 2 3; do
   ./programmer_cli --device GW1NR-9C --run 38 --mcuFile "$IMG/flash.bin" --spiaddr 0x000000 \
       --cable-index 4 --location "${LOC:-0}" > "$LOG" 2>&1 &
   PID=$!
-  stall=0
+  stall=0 last=
   while kill -0 "$PID" 2>/dev/null; do
     sleep 5
-    if tr '\r' '\n' < "$LOG" | grep -a '%' | tail -1 | grep -qE 'Erasing sector at 0\.\.\.: \[ *\] 0%'; then
+    cur=$(tr '\r' '\n' < "$LOG" | grep -a '%' | tail -1 || true)
+    if [[ "$cur" != "$last" ]]; then
+      last=$cur stall=0
+    else
       stall=$((stall + 5))
       if [[ $stall -ge 60 ]]; then
-        echo "attempt $attempt: GAO bridge stuck at the first sector erase, retrying"
+        echo "attempt $attempt: GAO bridge stuck${cur:+ at ${cur%%:*} ${cur##* }}, retrying"
         # stuck there, programmer_cli ignores SIGTERM; and under set -e a kill of a process
         # that is already gone would end the script
         kill -9 "$PID" 2>/dev/null || true
