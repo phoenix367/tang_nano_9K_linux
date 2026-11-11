@@ -380,6 +380,15 @@ if it exists.
     - `sw/br2-external/patches/linux/` holds a kernel patch (in `BR2_GLOBAL_PATCH_DIR`)
       making `__div64_32` use 32-bit `divu`. Patches apply on extract, so use
       `sw/build.sh linux-dirclean` after adding one.
+    - **Kernel hash:** `BR2_GLOBAL_PATCH_DIR` is only our `patches/`. Its
+      `linux/linux.hash` and `linux-headers/linux-headers.hash` give the sha256 of the
+      kernel tarball (the toolchain headers use the same tarball).
+      - `BR2_DOWNLOAD_FORCE_CHECK_HASHES` makes a missing hash an error, so a new kernel
+        version needs its line in both files, from kernel.org's `sha256sums.asc`.
+      - The hash used to come from Buildroot's `board/qemu/patches` (hash files only).
+    - **Buildroot output is not byte-reproducible.** Rebuilding with nothing changed gives an
+      `Image` of the same size but different bytes: the initramfs carries timestamps.
+      Compare images by behaviour, not by checksum.
     - The DT `/chosen/rng-seed`, marked "QRNGSEED", is filled by the boot ROM (`seed_dtb`:
       uninitialized PSRAM page + mtime). An unseeded crng runs a full entropy extraction
       for every random number drawn at boot (~1 s per 150 calls).

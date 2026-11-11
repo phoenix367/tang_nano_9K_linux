@@ -1,0 +1,6 @@
+# Kernel tarball for BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE (both defconfigs). The toolchain's
+# headers (BR2_KERNEL_HEADERS_AS_KERNEL) come from the same tarball, so linux and
+# linux-headers carry the same line. BR2_DOWNLOAD_FORCE_CHECK_HASHES makes a missing hash an
+# error: a new kernel version needs its line here, from
+# https://cdn.kernel.org/pub/linux/kernel/v6.x/sha256sums.asc
+sha256  b726a4d15cf9ae06219b56d87820776e34d89fbc137e55fb54a9b9c3015b8f1e  linux-6.18.7.tar.xz
