@@ -1,18 +1,19 @@
-// Simulation of fpga/probe_psram16 (the 16-bit HyperRAM controller and its test sequencer)
-// against two W955D8MBYA die models (verif/psram16/model, takayuki-nagata/psram_controller,
-// MIT), with Gowin's primitive models for ODDR/IDDR/ELVDS_OBUF. The probe's UART lines are
-// decoded and printed; the run ends after the sixth one (4 results, 2 traces).
-//   CK1_N = 1: die 1's clock pin is O_psram_ck_n[1] (as the Gowin IP drives it), else O_psram_ck[1]
-//   PHASE_NS: clk_p (CK) behind clk; 45 degrees at 42 MHz is 2.976 ns
+// Simulation of fpga/probe_psram16 (the 16-bit HyperRAM controller and its memory test) against
+// two W955D8MBYA die models (verif/psram16/model, takayuki-nagata/psram_controller, MIT), wired
+// as on the board: die 0's clock pin is O_psram_ck[0], die 1's O_psram_ck_n[1]. The Gowin I/O
+// primitives come from rtl/sim/gowin_io_sim.v, or from Gowin's own models with GOWIN_PRIM
+// defined. The probe's first UART result line is decoded and printed, and the run ends there.
+//   PHASE_NS: clk_p (CK) behind clk; 90 degrees at 42 MHz is 5.952 ns
 `timescale 1ns / 1ps
 `default_nettype none
 
 module tb_psram16;
-  parameter integer CK1_N    = 1;
-  parameter real    PHASE_NS = 2.976;
+  parameter real    PHASE_NS = 5.952;
   localparam real   HALF     = 11.905;           // 42 MHz
 
+`ifdef GOWIN_PRIM
   GSR GSR (.GSRI(1'b1));
+`endif
 
   reg clk = 1'b0, clk_p = 1'b0, clk27 = 1'b0;
   always #(HALF) clk = !clk;
@@ -34,9 +35,8 @@ module tb_psram16;
   // and CK Low for the first 100 ns instead of starting from the cells' 0 outputs.
   reg pwr = 1'b0;
   initial #100 pwr = 1'b1;
-  // die 1's clock pin per CK1_N; the model ignores its ck_n input
   wire ck0 = pwr & ck[0];
-  wire ck1 = pwr & (CK1_N ? ck_n[1] : ck[1]);
+  wire ck1 = pwr & ck_n[1];
   wire [1:0] cs_n_d = pwr ? cs_n : 2'b11;
   w955d8mbya_die #(.DIE(0)) die0 (.ck(ck0), .ck_n(!ck0), .cs_n(cs_n_d[0]),
                                   .reset_n(reset_n[0]), .dq(dq[7:0]), .rwds(rwds[0]));
@@ -45,7 +45,7 @@ module tb_psram16;
 
   // UART decode, 1 Mbaud
   reg [8*256-1:0] line_buf;
-  integer n_lines = 0, n_chars = 0, i;
+  integer i;
   reg [7:0] ch;
   always @(negedge uart_tx) begin
     #500;                                        // middle of the start bit
@@ -53,25 +53,16 @@ module tb_psram16;
     #1000;
     if (ch == 8'h0a) begin
       $display("UART: %0s", line_buf);
-      n_chars = 0; line_buf = 0; n_lines = n_lines + 1;
-      if (n_lines == 6) begin
-        $display("model protocol errors: die0 %0d, die1 %0d", die0.error_count, die1.error_count);
-        $finish;
-      end
+      $display("model protocol errors: die0 %0d, die1 %0d", die0.error_count, die1.error_count);
+      $finish;
     end else if (ch != 8'h0d) begin
-      line_buf = {line_buf[8*255-1:0], ch}; n_chars = n_chars + 1;
+      line_buf = {line_buf[8*255-1:0], ch};
     end
   end
 
-`ifdef TB_DEBUG
-  always @(dut.ts or dut.cfg or dut.pass)
-    $display("%0t ns: test state %0d cfg %0d pass %0d line %0d", $time, dut.ts, dut.cfg, dut.pass, dut.line);
-  always @(dut.ram.st) $display("%0t ns: ctrl state %0d", $time, dut.ram.st);
-`endif
-
   initial begin
     #(200_000_000);                               // 200 ms
-    $display("TIMEOUT: %0d lines", n_lines);
+    $display("TIMEOUT: no result line");
     $finish;
   end
 endmodule

@@ -6,6 +6,12 @@ negative slack, the worst setup paths, hold violations and the resource use.
 
 PNR_DIR defaults to fpga/impl/pnr (the board build's output). Exit status 1 if any clock
 misses its constraint or has negative slack, so the result can gate a load or a flash write.
+
+Guard bands: the SoC's SDC sets a setup clock uncertainty on cpu_clk (1.5 ns; fpga/build.sh
+SDC_UNCERT). Gowin's slack and Fmax include it. TNS 0 then means the constraint is met with the
+guard band to spare. A build that eats into the guard band but still meets the real clock is
+not a failure: each listed path's uncertainty (its tUnc) is added back, the real Fmax is
+1 / (1 / Fmax - uncertainty), and only a negative real slack fails.
 """
 import hashlib, html, os, re, sys, time
 
@@ -33,19 +39,39 @@ t = re.sub(r"<[^>]+>", " ", open(tr).read())
 t = re.sub(r"\s+", " ", html.unescape(t))
 bad = False
 
+# the setup guard bands in force (the report lists the SDC's constraints)
+unc = {(fr, to): float(u) for u, fr, to in re.findall(
+    r"set_clock_uncertainty (-?[\d.]+) -setup -from \[get_clocks \{(\S+)\}\] "
+    r"-to \[get_clocks \{(\S+)\}\]", t)}
+
 print("\nclock          constraint    Fmax    levels")
+real_ok = set()                           # clocks that meet their constraint without the band
 for clk, want, got, lvl in re.findall(r"(\S+) ([\d.]+)\(MHz\) ([\d.]+)\(MHz\) (\d+)", t):
-    miss = float(got) < float(want)
+    u = unc.get((clk, clk), 0.0)
+    real = 1000 / (1000 / float(got) - u)
+    miss = real < float(want)
     bad |= miss
-    print(f"{clk:14s} {want:>8s}  {got:>8s}  {lvl:>4s}{'  MISSES' if miss else ''}")
+    note = ""
+    if u:
+        note = f"  ({real:.3f} MHz without the {u:g} ns guard band"
+        note += ", which this build eats into)" if float(got) < float(want) and not miss else ")"
+        if not miss:
+            real_ok.add(clk)
+    print(f"{clk:14s} {want:>8s}  {got:>8s}  {lvl:>4s}{'  MISSES' if miss else ''}{note}")
 
 neg = [(c, k, v, n) for c, k, v, n in re.findall(r"(\S+) (Setup|Hold) (-?[\d.]+) (\d+)", t)
        if float(v) != 0.0]
+n_band = 0                                # endpoints failing only the guard band
 if neg:
-    bad = True
     print("\nnegative slack:")
     for c, k, v, n in neg:
-        print(f"  {c} {k}: TNS {v} over {n} endpoints")
+        if k == "Setup" and c in real_ok:
+            n_band += int(n)
+            print(f"  {c} {k}: TNS {v} over {n} endpoints (with the guard band; the paths below"
+                  " are checked without it)")
+        else:
+            bad = True
+            print(f"  {c} {k}: TNS {v} over {n} endpoints")
 else:
     print("\nTNS 0 on every clock (the summary table)")
 
@@ -54,20 +80,34 @@ def section(name, end):
     return t[i:t.find(end, i)] if i >= 0 else ""
 
 PATH = r"Path(\d+) Path Summary: Slack (-?[\d.]+) .*? From (\S+) To (\S+)"
-paths = re.findall(PATH, section("Setup Analysis Report", "Hold Analysis Report"))
+setup = section("Setup Analysis Report", "Hold Analysis Report")
+paths = []                                # (slack, slack without the guard band, from, to)
+for m in re.finditer(PATH, setup):
+    sl, fr, to = float(m.group(2)), m.group(3), m.group(4)
+    nxt = setup.find("Path Summary", m.end())
+    tu = re.search(r"-?[\d.]+ (-?[\d.]+) tUnc", setup[m.start():nxt if nxt > 0 else len(setup)])
+    paths.append((sl, sl - float(tu.group(1)) if tu else sl, fr, to))
 if paths:
-    print("\nworst setup paths (slack ns, from -> to):")
-    for n, sl, a, b in paths[:4]:
-        print(f"  {sl:>7s}  {a} -> {b}")
+    band = any(p[1] != p[0] for p in paths)
+    print("\nworst setup paths (slack ns" + (", without the guard band" if band else "")
+          + ", from -> to):")
+    for sl, rs, fr, to in paths[:4]:
+        print(f"  {sl:7.3f}" + (f"  {rs:7.3f}" if band else "") + f"  {fr} -> {to}")
     # Gowin's TNS table can leave a generated clock out (a phase-shifted rPLL output did), so
     # a negative slack in the path list counts too
-    if any(float(sl) < 0 for n, sl, a, b in paths):
+    if any(rs < 0 for sl, rs, fr, to in paths):
         bad = True
         print("  NEGATIVE setup slack in the path list")
+    listed = sum(1 for p in paths if p[0] < 0)
+    if n_band > listed:
+        bad = True
+        print(f"  {n_band} endpoints eat into the guard band but only {listed} are listed:"
+              " cannot check the rest")
 
 # The TNS table above can read 0 for hold while the hold path list has negative slacks (the
-# PSRAM IP's calibration flag into its input deserializers, a known IP-internal class that
-# user constraints cannot clear). List them; any outside the IP is a real failure.
+# Gowin PSRAM IP's calibration flag into its input deserializers, a known IP-internal class
+# that user constraints cannot clear; fpga/probe, and the SoC until 2026-11). List them; any
+# outside the IP is a real failure.
 hold = [(float(sl), a, b) for n, sl, a, b in
         re.findall(PATH, section("Hold Analysis Report", "Recovery Analysis Report"))
         if float(sl) < 0]

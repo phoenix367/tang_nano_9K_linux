@@ -6,10 +6,10 @@
 #
 # fpga/build/ holds the boot ROM hex, tang9k_cfg.v (TANG9K_CPU_HZ, TANG9K_UART_BAUD,
 # TANG9K_BOOTROM_FILE, TANG9K_VIDEO) and tang9k_soc.sdc (from fpga/src, + video clocks),
-# the first file of fpga/tang9k_soc.gprj. The PSRAM IP and rPLL under fpga/src/ are
+# the first file of fpga/tang9k_soc.gprj. The rPLL under fpga/src/ and the PSRAM controller are
 # described in fpga/src/tang9k_top.v and gowin_rpll.v.
 #
-# Env: CPU_HZ (default 42000000: the IP's clk_out at memory_clk 84 MHz), BAUD (default
+# Env: CPU_HZ (default 42000000: the rPLL's CLKOUT), BAUD (default
 #      1000000; the UART divider is CPU_HZ / BAUD, fixed in hardware), SMODE (default 0; 1 =
 #      the stage-2 CPU with S-mode + SV32 MMU, which also runs the stage-1 kernel), VIDEO
 #      (default 0; 1 = HDMI framebuffer scanout, doc/video_plan.md), STAGE (syn|pnr|all),
@@ -37,12 +37,13 @@ EOF
 # Constraints: one file (Gowin reads each SDC file on its own), fpga/src/tang9k_soc.sdc plus
 # the video clocks when VIDEO=1 (their nets only exist with video). The define switches the
 # board top's video clocks and PHY.
-# SDC_MEM_MULT (default 28) over-constrains the clocks for the placer only: 30 makes the
-# analysis target memory_clk 90 / CPU 45 MHz while the rPLL still makes 84 / 42. The
-# report's Fmax is the real figure either way.
-sed "s/-multiply_by 28 -divide_by 9/-multiply_by ${SDC_MEM_MULT:-28} -divide_by 9/" \
-  "$HERE/src/tang9k_soc.sdc" > "$B/tang9k_soc.sdc"
-grep -q -- "-multiply_by ${SDC_MEM_MULT:-28} -divide_by 9" "$B/tang9k_soc.sdc"
+# SDC_UNCERT=<ns> replaces the SDC's setup clock uncertainty on cpu_clk (1.5 ns), to try
+# another guard band when a change costs timing (fpga/src/tang9k_soc.sdc has the history).
+cp "$HERE/src/tang9k_soc.sdc" "$B/tang9k_soc.sdc"
+if [[ -n "${SDC_UNCERT:-}" ]]; then
+  sed -i "s/^set_clock_uncertainty 1\.5 /set_clock_uncertainty $SDC_UNCERT /" "$B/tang9k_soc.sdc"
+  [[ $(grep -c "^set_clock_uncertainty $SDC_UNCERT " "$B/tang9k_soc.sdc") == 2 ]]
+fi
 if [[ "$VIDEO" == 1 ]]; then
   echo '`define TANG9K_VIDEO' >> "$B/tang9k_cfg.v"
   cat >> "$B/tang9k_soc.sdc" <<'SDC'
@@ -52,14 +53,14 @@ if [[ "$VIDEO" == 1 ]]; then
 // through toggle handshakes and the dual-clock line buffer (rtl/video/video_ctrl.v).
 create_generated_clock -name hdmi_fclk -source [get_ports {clk_27m}] -master_clock clk27 -multiply_by 14 -divide_by 3 [get_nets {hdmi_fclk}]
 create_generated_clock -name pix_clk -source [get_nets {hdmi_fclk}] -master_clock hdmi_fclk -divide_by 5 [get_pins {hdmi_div/CLKOUT}]
-set_clock_groups -asynchronous -group [get_clocks {pix_clk}] -group [get_clocks {cpu_clk}]
-set_clock_groups -asynchronous -group [get_clocks {hdmi_fclk}] -group [get_clocks {cpu_clk}]
+set_clock_groups -asynchronous -group [get_clocks {pix_clk}] -group [get_clocks {cpu_clk ck_clk}]
+set_clock_groups -asynchronous -group [get_clocks {hdmi_fclk}] -group [get_clocks {cpu_clk ck_clk}]
 set_clock_groups -asynchronous -group [get_clocks {clk27}] -group [get_clocks {pix_clk}]
 SDC
 fi
 [[ "${1:-}" == prep ]] && exit 0
 
-for ip in psram_memory_interface_hs_2ch gowin_rpll; do
+for ip in gowin_rpll; do
   [[ -d "$HERE/src/$ip" ]] || { echo "missing fpga/src/$ip" >&2; exit 1; }
 done
 

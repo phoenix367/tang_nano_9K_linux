@@ -2,7 +2,8 @@
 
 The gateware turns a Sipeed Tang Nano 9K into a small Linux computer. A soft RISC-V CPU
 sits in the board's Gowin GW1NR-9, around it:
-- a 16 KB cache in front of the 8 MB PSRAM in the FPGA package;
+- a 16 KB cache and the project's own 16-bit PSRAM controller in front of the 8 MB PSRAM in
+  the FPGA package;
 - an HDMI video controller with a framebuffer and a hardware text mode;
 - a UART, a timer (CLINT) and an interrupt controller (PLIC);
 - an I2C master, an SPI master for the microSD slot, and a read window on the SPI flash;
@@ -11,12 +12,17 @@ sits in the board's Gowin GW1NR-9, around it:
 The CPU runs Linux 6.18 with SV32 virtual memory and drives all of them. This document
 describes the hardware in the order of an FPGA architecture document: requirements,
 top-level structure, clocks and reset, memory, datapath, interfaces, verification, and
-implementation. The numbers are those of the bitstream `tang9k_soc_cbo.fs` (2026-11-11,
-`SMODE=1 VIDEO=1`; the implementation reports in `fpga/impl/` of 2026-11-11 13:40, a rebuild
-of the same design) and the Zicbom MMU kernel, unless a section says otherwise.
+implementation. The timing, resource and power numbers are those of the bitstream
+`tang9k_soc_unc.fs` (2026-11-11, `SMODE=1 VIDEO=1`, the project's own PSRAM controller in
+place of Gowin's PSRAM IP, a 1.5 ns setup guard band in the SDC), which the internal flash
+holds (written 2026-11-11). Most board measurements were made with `tang9k_soc_hr16.fs`, the
+same RTL placed against an over-constrained 48 MHz instead, and the Zicbom MMU kernel; the
+autoboot from the internal flash gave the same times on both.
+Figures measured with the IP's bitstream, `tang9k_soc_cbo.fs`, are marked as such.
 
 | topic | document |
 |---|---|
+| the PSRAM controller: design, bus timing, verification, what the board showed | [psram_controller.md](psram_controller.md) |
 | the no-MMU stage: milestones M0–M4, memory map, the CPU's Linux extensions | [stage1_plan.md](stage1_plan.md) |
 | the MMU stage: S-mode, the SV32 MMU, boot-time work | [stage2_plan.md](stage2_plan.md) |
 | HDMI: the video controller, the text console, the boot splash | [video_plan.md](video_plan.md) |
@@ -44,8 +50,8 @@ The fabric adds these blocks around it:
 |---|---|---|
 | **qerv_cpu** (`rtl/qerv/`) | Sparrow-SERV `LINUX=1 SMODE=1`, `mdu_top` (M extension), `amo_unit` (A extension), `sv32_mmu` (256-entry TLB in block RAM, one-page micro-TLB per bus) | 12 cycles per ALU instruction, 22 per load/store before wait states (§5.4) |
 | **l1_cache** (`rtl/soc/l1_cache.v`) | 16 KB unified, direct-mapped, write-back, 32-byte lines; the uncached alias; cache-block operations | hit: ack 2 cycles after the request |
-| **psram_arb** (`rtl/soc/psram_arb.v`) | shares the PSRAM IP's two channels between the cache and the video DMA; the IP's register stage | one 32-byte burst per channel per 19 cycles: 70.7 MB/s per channel |
-| **PSRAM IP** (Gowin `psram_memory_interface_hs_2ch`, generated netlist) | 8 MB in two 4 MB dies, a 32-bit user port per channel, 8-beat bursts | memory clock 84 MHz; read latency 16 cycles of 42 MHz |
+| **psram_arb** (`rtl/soc/psram_arb.v`) | shares the PSRAM controller between the cache and the video DMA; registers the granted command; an 8-entry write-beat buffer; routes read beats to the master that asked | one 32-byte line per 18 cycles: 74.7 MB/s, shared |
+| **hyperram_x16** (`rtl/psram/hyperram_x16.v`) | both 4 MB dies in lockstep as one 16-bit DDR bus, CK at the SoC clock (1:1, 90° later), no calibration; a 32-bit port, 8-beat bursts | read beat k 16 + k cycles after the command; 18 cycles per line, 11 per uncached word write |
 | **video_ctrl** (`rtl/video/`) | 640 × 480 at 60 Hz: framebuffer scan-out (RGB565) with Y-wrap panning, an 80 × 30 text mode, TMDS encoding; `hdmi_phy_gowin` serializes | 25.2 MHz pixel clock, 252 Mbit/s per TMDS lane; 36.9 MB/s of framebuffer reads |
 | **uart_16550** | 16550 register subset, 256-byte FIFOs in block RAM, interrupt | 1 Mbaud 8N1, fixed |
 | **plic**, **clint** | 2 interrupt sources to the S external interrupt; mtime at 1 MHz, mtimecmp | |
@@ -53,7 +59,7 @@ The fabric adds these blocks around it:
 | **spi_master** | the microSD slot in SPI mode, hardware CRC16 for the data blocks | SCK up to 21 MHz; 72 KB/s file reads measured |
 | **spi_flash_xip** | a read-only window on the 4 MB SPI NOR flash | READ (0x03) at SCK 21 MHz |
 | **bootrom** (`sw/bootrom/bootrom.S`) | 4 KB: serial monitor, flash autoboot, boot splash, SBI v0.1 shim | |
-| **syscon** | power off, reboot, status counters (PSRAM commands, cache misses and write-backs), the video registers | |
+| **syscon** | power off, reboot, status counters (PSRAM ready, commands, read beats and filler beats, cache misses and write-backs), the video registers | |
 
 Everything shares one memory. The CPU reaches the PSRAM through the cache; the video DMA
 reads lines straight from PSRAM through the arbiter. The CPU writes the framebuffer through
@@ -73,20 +79,24 @@ Measured on the board (2026-11-10/11):
 
 | workload | result |
 |---|---|
-| power-up to the shell (both flashes, autoboot) | `Run /init` 19.8 s and `~ #` 24.6 s after the boot ROM's prompt; the ROM copies 3.4 MB from flash first |
-| kernel boot, UART-loaded (`B` to `Run /init`) | 12.4 s |
+| power-up path (autoboot: kernel from the SPI flash) | `Run /init` 20.0 s and `~ #` 24.9 s after the boot ROM's prompt; the ROM copies 3.4 MB from flash first (6.1 s). With the IP: 19.8 s and 24.6 s |
+| kernel boot, UART-loaded (`B`) | `Run /init` at 12.58 s of kernel time (12.35–12.39 s with the IP, same kernel); the host saw `Run /init` 14.0 s and `~ #` 19.1 s after `B` |
 | memory after boot (`free`) | 2,100 KB available of 8,192 KB |
+| 8 MB memory test through the cache (`qerv_boot.py --memtest`) | 42.1 s, with scan-out running: 50.4 M PSRAM commands, 398 M read beats, no filler beat |
+| video scan-out | 2,550 frames without an underflow during the memory test. With the IP: 649 frames without an underflow; `Run /init` 8.86 s with scan-out on, 8.87 s off |
 | `dmesg` to the serial console | 1.3 s with the UART interrupt (6.9 s polled) |
 | `dmesg` to the HDMI text console (`/dev/tty1`) | 2.8 s (55 s with fbcon on the framebuffer) |
 | microSD read, 1 MB | 72 KB/s through the file system, 95 KB/s raw (`iflag=direct`) |
-| video scan-out | 649 frames without an underflow; `Run /init` 8.86 s with scan-out on, 8.87 s off |
 | full-SoC simulation to the shell (Verilator) | ~2.4 MHz simulated; a boot takes several minutes |
+
+The `dmesg` and microSD rows were measured with the IP bitstream.
 
 What bounds them:
 - **The CPU.** A bit-serial core at 42 MHz runs roughly 2 million instructions per second
   (about 0.5 µs each, cache misses included). The emulator model put cache misses at only 1–2 s of a boot.
   Most of the boot is kernel work: the 100 Hz tick (about 25% of the cycles), initramfs
-  unpacking, page zeroing.
+  unpacking, page zeroing. Sharing one PSRAM bus with scan-out, instead of the IP's two
+  channels, costs the kernel 0.2 s.
 - **Memory.** 8 MB holds the kernel, the initramfs and a few processes; no swap.
 
 ### 1.3 Power envelope
@@ -94,41 +104,43 @@ What bounds them:
 There is no power budget beyond the board's USB supply, and the board has no current sense,
 so board power is not measured.
 
-Gowin's power analyser (`fpga/impl/pnr/tang9k_soc.power.html`) estimates **63.2 mW** for the
-FPGA:
-- 25.3 mW quiescent and 37.8 mW dynamic, plus 86 mW it lists separately for the PSRAM;
-- junction 26.3 °C at 25 °C ambient, no heat sink, no airflow;
+Gowin's power analyser (`fpga/impl/pnr/tang9k_soc.power.html`) estimates **56.0 mW** for the
+FPGA with the PSRAM controller:
+- 25.3 mW quiescent and 30.7 mW dynamic, plus 86 mW it lists separately for the PSRAM;
+- junction 26.2 °C at 25 °C ambient, no heat sink, no airflow;
 - default toggle rates of 12.5 %, no VCD, so the confidence is low.
 
 By hierarchy (mW):
 
 | block | power |
 |---|---|
-| CPU (core, RF, MMU, MDU, AMO) | 8.9 (MMU 3.6, RF 1.6) |
+| CPU (core, RF, MMU, MDU, AMO) | 8.9 (MMU 3.6, MDU 3.5, RF 1.6) |
 | video controller | 8.2 |
-| PSRAM IP | 5.4 |
 | video PLL | 3.5 |
 | UART | 3.3 |
-| system PLL | 2.3 |
 | cache | 1.3 |
+| system PLL | 1.2 |
+| PSRAM controller | 0.1 |
 | everything else | < 0.4 each |
 
-By clock (dynamic, mW): cpu_clk 19.5, clk27 5.9, memory_clk 5.2, pix_clk 3.2. By block type:
-BSRAM 17.8, I/O 10.7, PLLs 5.9, DLL 5.2, DSP 3.4, logic 1.4.
+By clock (dynamic, mW): cpu_clk 19.3, clk27 4.7, pix_clk 3.2, ck_clk 0.002. By block type:
+BSRAM 17.8, I/O 10.1, PLLs 4.7, DSP 3.4, logic 1.3. There is no DLL any more.
+With Gowin's IP the estimate was 63.2 mW (37.8 mW dynamic), the IP itself 5.4 mW and its
+memory_clk 5.2 mW.
 
 ### 1.4 External interfaces
 
 | interface | pins | I/O | use |
 |---|---:|---|---|
-| crystal | 1 | pin 52, 27 MHz, LVCMOS33 | both rPLLs and the PSRAM IP's reference |
-| PSRAM, 2 × 32 Mbit in the package | (internal) | placed by the PSRAM IP | main memory (§4.4) |
+| crystal | 1 | pin 52, 27 MHz, LVCMOS33 | both rPLLs, the reset debouncer and the power-on counter |
+| PSRAM, 2 × 32 Mbit in the package | (internal) | internal pads, placed by port name (no `IO_LOC`) | main memory (§4.4) |
 | SPI NOR flash, P25Q32 4 MB | 4 | 59 SCK, 60 CS, 61 MOSI, 62 MISO; LVCMOS33 | kernel, DTB, splash (§3.5); the MSPI pins, freed as GPIO |
 | console UART | 2 | 17 TX, 18 RX; LVCMOS33 | through the board's USB bridge (`/dev/ttyUSB1`), 1 Mbaud |
 | HDMI | 8 | 68–75: four `ELVDS_OBUF` pairs (clock 69/68, data 71/70, 73/72, 75/74) | TMDS; shared with the 40-pin LCD connector, which must stay empty |
 | I2C | 2 | 25 SDA, 26 SCL; LVCMOS33 open drain, weak pull-ups | `/dev/i2c-0` |
 | microSD slot | 4 | 36 CLK, 37 CMD/MOSI, 38 DAT3/CS, 39 DAT0/MISO; LVCMOS33 | SPI mode |
 | reset button | 1 | pin 3, 1.8 V bank, pull-up | system reset (the button printed "S2" on this board) |
-| LEDs | 6 | 10, 11, 13–16, active low, 1.8 V bank | heartbeat, PLL lock, PSRAM calibrated, UART TX, in reset, powered off |
+| LEDs | 6 | 10, 11, 13–16, active low, 1.8 V bank | heartbeat, PLL lock, PSRAM ready, UART TX, in reset, powered off |
 | JTAG | 4 | dedicated | configuration through the board's USB bridge |
 
 There are 28 user ports. There is no Ethernet, no USB device, no audio and no camera in the
@@ -141,7 +153,7 @@ design.
 | board | Sipeed Tang Nano 9K |
 | device | Gowin GW1NR-LV9QN88PC6/I5 (GW1NR-9, device version C), QFN88 |
 | fabric | 8,640 LUT4, 6,480 flip-flops, 26 BSRAM (18 Kbit), 10 DSP blocks, 2 rPLLs |
-| in the package | 64 Mbit PSRAM (two 32 Mbit dies); the configuration flash |
+| in the package | 64 Mbit PSRAM (two 32 Mbit W955D8MBYA dies); the configuration flash |
 | on the board | 32 Mbit SPI NOR (P25Q32), microSD slot, HDMI connector, BL702 USB-JTAG/UART bridge (enumerates as FT2232, `0403:6010`) |
 | gateware tools | Gowin EDA V1.9.12.02 SP2 (`gw_sh`, GowinSyn, `programmer_cli`); openFPGALoader |
 | simulation | Icarus Verilog (unit benches), Verilator (the whole SoC); a Python ISS for lockstep checks |
@@ -154,12 +166,13 @@ design.
 ### 2.1 Block diagram
 
 The datapath. One clock (cpu_clk, 42 MHz) runs the CPU, the bus, every slave, the cache, the
-arbiter and the PSRAM IP's user side; the pixel pipeline runs on its own clock.
+arbiter and the PSRAM controller; only the controller's CK outputs run on ck_clk, the same
+clock 90° later. The pixel pipeline runs on its own clock.
 
 ```mermaid
 graph TB
   subgraph TOP["tang9k_top.v"]
-    PLL["Gowin_rPLL<br/>84 MHz memory_clk"]
+    PLL["Gowin_rPLL<br/>cpu_clk 42 MHz<br/>+ ck_clk 42 MHz, +90°"]
     VPLL["Gowin_rPLL_video 126 MHz<br/>+ CLKDIV ÷5: 25.2 MHz"]
     subgraph SOC["soc_top.v (cpu_clk 42 MHz)"]
       CPU["qerv_cpu<br/>Sparrow-SERV W=4 + MDU<br/>+ sv32_mmu + amo_unit"]
@@ -168,7 +181,7 @@ graph TB
       ROM["bootrom 4 KB"]
       IO["uart · clint · plic · syscon<br/>i2c · spi_master · spi_flash_xip"]
       CACHE["l1_cache 16 KB<br/>+ uncached alias"]
-      ARB["psram_arb<br/>2 channels, TCMD"]
+      ARB["psram_arb<br/>one command at a time"]
       subgraph VID["video_ctrl"]
         DMA["video_dma<br/>40 bursts per line"]
         LB["line buffer<br/>2 × 1280 B, dual clock"]
@@ -176,21 +189,21 @@ graph TB
         VO["video_out (pix_clk)<br/>timing, pixels, TMDS"]
       end
     end
-    IP["PSRAM IP<br/>psram_memory_interface_hs_2ch"]
+    HR["hyperram_x16<br/>16-bit PSRAM controller<br/>ODDR / IDDR"]
     PHY["hdmi_phy_gowin<br/>4 × OSER10 + ELVDS"]
   end
-  PSRAM[("PSRAM 8 MB<br/>2 dies, in the package")]
+  PSRAM[("PSRAM 8 MB<br/>2 dies in lockstep, in the package")]
   FLASH[("SPI NOR 4 MB")]
   HDMI["HDMI monitor"]
 
   CPU --> ARBI --> DEC
-  DEC -->|"0x8 / 0x9: direct"| CACHE --> ARB --> IP --> PSRAM
+  DEC -->|"0x8 / 0x9: direct"| CACHE --> ARB --> HR --> PSRAM
   DEC -->|"I/O: one cycle later"| ROM & IO & TXT
   IO --> FLASH
   DMA --> ARB
   DMA --> LB --> VO
   TXT --> VO --> PHY --> HDMI
-  PLL --> IP
+  PLL -->|"cpu_clk, ck_clk"| HR
   VPLL --> VO & PHY
 ```
 
@@ -212,8 +225,8 @@ The top (`fpga/src/tang9k_top.v`) instantiates:
 
 | instance | module | clocks | role |
 |---|---|---|---|
-| `pll` | `Gowin_rPLL` (hand-written wrapper) | clk_27m | memory_clk 84 MHz (27 × 28 / 9) |
-| `psram` | `Video_frame_buffer` (the PSRAM IP netlist) | clk_27m, memory_clk; makes clk_out = cpu_clk | the memory controller, both channels |
+| `pll` | `Gowin_rPLL` (hand-written wrapper) | clk_27m | cpu_clk 42 MHz (27 × 14 / 9, `CLKOUT`) and ck_clk, the same 90° later (`CLKOUTP`) |
+| `psram` | `hyperram_x16` | cpu_clk, ck_clk | the PSRAM controller: both dies as one 16-bit bus, CR0 `0x8FEE` |
 | `vpll`, `hdmi_div` | `Gowin_rPLL_video`, `CLKDIV` "5" | clk_27m | 126 MHz TMDS clock, 25.2 MHz pixel clock |
 | `soc` | `soc_top` | cpu_clk, pix_clk | everything else |
 | `hdmi` | `hdmi_phy_gowin` | pix_clk, 126 MHz | serializers and differential outputs |
@@ -280,12 +293,14 @@ on each line request from the pixel side.
 ### 2.5 Floorplan
 
 There are no placement regions and no `INS_LOC` constraints. What fixes placement:
-- The PSRAM IP's pins and I/O logic are fixed by the package: 16 `IDES4`, 23 `OSER4` and
-  19 `IODELAY` cells, plus the HDMI's 4 `OSER10` (47 of 97 IOLOGIC).
+- The PSRAM pins are fixed by the package (internal pads, placed by port name). Their I/O
+  logic is the controller's 18 `IDDR` and 23 `ODDR` cells, plus the HDMI's 4 `OSER10`
+  (49 of 97 IOLOGIC). Die 0's CK goes out on two single-ended pins (IOL8A/IOL7A), one `ODDR`
+  each; an `ELVDS_OBUF` there made the placer move the pair to package pins 85/86. Die 1's CK
+  is the IOL23A/B pair, through an `ELVDS_OBUF`.
 - The HDMI pairs are on bank 1 (pins 68–75), which they share with the LCD connector's
   lines.
-- Placement is congested: 86% of the logic sites (CLS) hold something, and the worst routing
-  cells reach 85% congestion.
+- Placement is congested: 86% of the logic sites (CLS) hold something.
 
 ---
 
@@ -296,11 +311,10 @@ There are no placement regions and no `INS_LOC` constraints. What fixes placemen
 ```mermaid
 flowchart LR
   XO["27 MHz crystal<br/>pin 52"]
-  XO --> PLL["Gowin_rPLL<br/>27 × 28 / 9"]
-  PLL --> MEM["memory_clk 84 MHz<br/>PSRAM IP (bank 6/7 HCLK)"]
-  MEM --> DIV["IP CLKDIV ÷2"]
-  DIV --> CPU["cpu_clk 42 MHz = clk_out<br/>the whole SoC"]
-  XO -->|"reference"| IPR["PSRAM IP calibration,<br/>reset debounce, power-on reset"]
+  XO --> PLL["Gowin_rPLL<br/>27 × 14 / 9"]
+  PLL -->|"CLKOUT"| CPU["cpu_clk 42 MHz<br/>the whole SoC and the PSRAM controller"]
+  PLL -->|"CLKOUTP, +90°"| CK["ck_clk 42 MHz<br/>the PSRAM's CK (ODDR)"]
+  XO --> RSTG["reset debounce,<br/>power-on reset"]
   XO --> VPLL["Gowin_rPLL_video<br/>27 × 14 / 3"]
   VPLL --> F["hdmi_fclk 126 MHz<br/>OSER10 FCLK (both edges)"]
   F --> HD["CLKDIV ÷5"]
@@ -309,35 +323,41 @@ flowchart LR
 
 Both rPLLs take the 27 MHz crystal. The device has two rPLLs, so both are in use.
 
-- **cpu_clk is the IP's clk_out**, half the memory clock. The CPU, the bus, every slave and
-  the IP's user side are one timed domain; the IP's command and data ports need no
-  synchronizer.
-- **The memory clock must avoid ~77.6–81 MHz.** With this IP netlist the PSRAM does not
-  calibrate there (channel 1, and at 81 MHz both). 54–77.1 and 84–135 MHz calibrate. The
-  clock was 72 MHz (CPU 36 MHz) before it moved to 84 MHz.
+- **cpu_clk is the rPLL's `CLKOUT`** (IDIV 8, FBDIV 13, ODIV 16: PFD 3 MHz, VCO 672 MHz).
+  The CPU, the bus, every slave and the PSRAM controller are one timed domain; the
+  controller's command and data ports need no synchronizer.
+- **ck_clk is `CLKOUTP`, cpu_clk 90° later** (`PSDA_SEL` "0100"). It clocks only the `ODDR`
+  cells that drive the PSRAM's CK, so CK's edges fall inside the data eyes. Their inputs come
+  from falling-edge registers on cpu_clk. The board passes every phase from 22.5° to 157.5°;
+  90° is the middle.
+- **There is no memory clock and no calibration.** CK runs at the SoC clock (1:1). Until
+  2026-11-11 the SoC ran on Gowin's PSRAM IP's clk_out, half its 84 MHz memory clock, and
+  that clock had to avoid ~77.6–81 MHz, where the IP never calibrated.
 - **The CLINT's 1 MHz** is a prescaler on cpu_clk (`CLK_HZ` from `fpga/build/tang9k_cfg.v`).
   The UART's bit time is `CLK_HZ / BAUD`, fixed in hardware.
 - **The SD and flash clocks** are registers toggled on cpu_clk: SCK = 42 / (2 (DIV + 1)) MHz
   for the SD card (21 MHz at DIV 0), 21 MHz for the flash.
 
-Global clock wires: PRIMARY 4 of 8 (the crystal, cpu_clk, pix_clk, and one SD-receive net
-that PnR promoted), LW 8 of 8 (resets and high-fanout CPU nets), bank HCLK for memory_clk
-and hdmi_fclk.
+Global clock wires: PRIMARY 4 of 8 (the crystal, cpu_clk, ck_clk and pix_clk), LW 7 of 8
+(resets and high-fanout CPU nets), GCLK_PIN 2 of 3, and a bank HCLK for hdmi_fclk.
 
 ### 3.2 Clock domains and their maximum frequencies
 
 The SDC (`fpga/src/tang9k_soc.sdc`, plus the video clocks that `fpga/build.sh` appends) defines
-the crystal and four generated clocks. Fmax is the post-route figure of the 2026-11-11 build:
+the crystal and four generated clocks. Fmax is the post-route figure of the
+`tang9k_soc_unc.fs` build:
 
 | domain (SDC) | frequency | source | logic | Fmax |
 |---|---|---|---|---|
-| `cpu_clk` | 42 MHz | PSRAM IP CLKDIV ÷2 | CPU, MMU, cache, arbiter, every slave, the video DMA and registers, the IP's user side | **42.126 MHz** (10 levels) |
-| `pix_clk` | 25.2 MHz | video CLKDIV ÷5 | `video_out`: timing, line-buffer and text reads, font, palette, TMDS encoders | 28.507 MHz (18 levels) |
-| `clk27` | 27 MHz | pin | reset debounce, power-on reset, the IP's init sequencing | 119.6 MHz |
-| `memory_clk` | 84 MHz | system rPLL | inside the PSRAM IP | (IP paths only) |
+| `cpu_clk` | 42 MHz | system rPLL `CLKOUT` | CPU, MMU, cache, arbiter, every slave, the video DMA and registers, the PSRAM controller | **45.177 MHz** (13 levels) without the 1.5 ns guard band; 42.310 MHz with it |
+| `ck_clk` | 42 MHz, +90° | system rPLL `CLKOUTP` | the `ODDR` cells that drive the PSRAM's CK | (I/O cells only) |
+| `pix_clk` | 25.2 MHz | video CLKDIV ÷5 | `video_out`: timing, line-buffer and text reads, font, palette, TMDS encoders | 31.438 MHz |
+| `clk27` | 27 MHz | pin | reset debounce, power-on reset | 198 MHz |
 | `hdmi_fclk` | 126 MHz | video rPLL | OSER10 fast clock | (serializer only) |
 
-cpu_clk meets 42 MHz with 0.072 ns of slack; §8.4 has the history.
+The SDC keeps a 1.5 ns setup guard band on cpu_clk's paths (`set_clock_uncertainty`, §8.2),
+and the build meets 42 MHz with it: +0.175 ns with the band, +1.675 ns without. §8.4 has the
+history.
 
 ### 3.3 Clock-domain crossings
 
@@ -349,11 +369,13 @@ cpu_clk meets 42 MHz with 0.072 ns of slack; §8.4 has the history.
 | cpu_clk → pix_clk | text buffer | a dual-clock block RAM, written by the CPU, read by the pixel side |
 | pix_clk → cpu_clk | frame counter, vblank, underflow | toggles + synchronizers |
 | clk27 → cpu_clk | the system reset | asynchronous assert, 4-flop synchronous release (§3.4) |
-| memory_clk ↔ cpu_clk | inside the PSRAM IP | 2:1 related clocks; `set_multicycle_path 2` (setup) / 1 (hold) from memory_clk to cpu_clk |
+| cpu_clk → ck_clk | the CK `ODDR`s' inputs | the same clock 90° later, timed by the SDC; the inputs come from falling-edge registers, so the `ODDR` samples them T/2 + 90° after cpu_clk's edge, not a cycle early |
+| PSRAM pads → cpu_clk | DQ and RWDS | `IDDR` cells on cpu_clk. Read words are found from RWDS into per-die 8-word FIFOs, not counted; a word missing at the end of the 16-cycle capture window comes out as a filler with `o_rerr` |
 | pads → cpu_clk | UART RX, I2C SCL/SDA, SD and flash MISO | synchronizers in the UART and I2C cores; SD and flash MISO are sampled at a SCK edge that cpu_clk itself makes |
 
-The SDC makes clk27 asynchronous to memory_clk, cpu_clk and pix_clk, and pix_clk and
-hdmi_fclk asynchronous to cpu_clk. There is no `set_false_path` or `set_max_delay`.
+The SDC makes clk27 asynchronous to cpu_clk, ck_clk and pix_clk, and pix_clk and hdmi_fclk
+asynchronous to cpu_clk and ck_clk. There is no `set_false_path`, `set_max_delay` or
+`set_multicycle_path`.
 
 ### 3.4 Reset
 
@@ -361,26 +383,28 @@ hdmi_fclk asynchronous to cpu_clk. There is no `set_false_path` or `set_max_dela
 flowchart LR
   BTN["button S2<br/>pin 3"] --> S3["3 flops<br/>on clk27"] --> DB["debounce<br/>2^16 cycles, 2.4 ms"] --> SR["sys_rst_n"]
   POR["power-on counter<br/>2^18 cycles, 9.7 ms"] --> SR
-  SR --> IPR["PSRAM IP rst_n<br/>recalibrates"]
   SR --> AND["& pll_lock"] --> RS["4-flop sync<br/>on cpu_clk"] --> RST["SoC reset (LW net)"]
   RST --> CPUR["cpu_rst register<br/>+ reboot hold"]
+  RST --> HRR["PSRAM controller<br/>RESET# pulse, CR0 write"]
   AND --> PAND["& video PLL lock"] --> PS["4-flop sync<br/>on pix_clk"] --> PRST["pixel reset"]
-  CAL["init_calib0/1"] -.->|"the cache waits"| CACHE["l1_cache"]
+  INIT["controller o_ready<br/>(after o_init_done)"] -.->|"the arbiter waits"| ARB["psram_arb"]
 ```
 
 - **Sources.** The reset button (active low), the power-on counter, the PLL locks, and a
   SYSCON reboot (`0x7777` to offset 0), which holds the CPU's reset for 15 cycles.
-- **What resets.** The button resets the PSRAM IP (which recalibrates, so RAM contents are
-  lost), the cache's state machine, the CPU and every peripheral; the MMU sweeps the TLB
-  empty. The boot ROM starts over.
+- **What resets.** The button resets the PSRAM controller (it pulses RESET# and writes CR0
+  again, ~0.2 ms; RAM contents are not guaranteed), the cache's state machine, the CPU and
+  every peripheral; the MMU sweeps the TLB empty. The boot ROM starts over.
 - **What does not.** The cache's tag RAM gets its zeros only from the bitstream, so lines
   cached before a reset stay valid (and dirty ones dirty) after it. Every CPU access goes
   through the cache, so the CPU's view of memory stays consistent; the PSRAM behind it does
   not hold those lines until they are written back.
 - **Ordering.** The SoC leaves reset as soon as the system PLL locks; the CPU runs the boot
-  ROM (banner, prompt) before the PSRAM is calibrated. The cache holds PSRAM accesses until
-  `init_calib` (about 15.6 ms after the IP's reset), and the ROM's memory commands wait for
-  it.
+  ROM (banner) before the PSRAM is ready. The controller takes no command until it has
+  initialized the dies (RESET# for 2 µs, 160 µs for tVCS, then the CR0 write: `o_init_done`
+  about 0.2 ms after reset), and the arbiter grants only when the controller is ready. The
+  ROM's `m`, `c`, `b` and `f` wait up to 0.5 s for SYSCON status bits 1:0, else print
+  "psram not ready". (Gowin's IP calibrated for about 15.6 ms after each reset.)
 - **Inside the blocks:** asynchronous assertion, synchronous release through the 4-flop
   chains. The CPU's reset comes from a register (`cpu_rst`), so it reaches the bus-request
   gating from a flop, not from logic.
@@ -390,13 +414,14 @@ flowchart LR
 ### 3.5 Power-on and configuration sequence
 
 1. The FPGA loads its bitstream from the internal configuration flash.
-2. The PLLs lock; the power-on counter runs 9.7 ms; the PSRAM IP calibrates (~15.6 ms).
+2. The PLLs lock; the power-on counter runs 9.7 ms; the PSRAM controller initializes the
+   dies (~0.2 ms).
 3. The boot ROM prints its banner and `> ` prompt on the UART. With video present, it draws
    the splash from the SPI flash into the framebuffer (a run-length list, ~0.2 s through the
    uncached alias) and turns scan-out on.
 4. With no command for 2 s and an image in the flash (header `QRVL`), it autoboots: it copies
-   the DTB and the Image to PSRAM (about 6 s for 3.4 MB; 5.3 s for the 2.9 MB of the
-   previous image), fills the DTB's `rng-seed`,
+   the DTB and the Image to PSRAM (6.1 s for 3.4 MB; 5.3 s for the 2.9 MB of an earlier
+   image), fills the DTB's `rng-seed`,
    installs the SBI shim (M-mode trap handler, delegation, `mideleg 0x220`) and enters the
    kernel in S-mode with a0 = 0, a1 = the DTB.
 5. Linux boots with the splash still on screen. `qervcon` takes over the HDMI output at the
@@ -435,7 +460,7 @@ The device has 26 BSRAM blocks of 18 Kbit; **24 are used** (9 single-port, 11 du
 | `cpu` | 3 | register file + CSRs (1), TLB (2) |
 | `rom` | 2 | boot ROM, 1024 × 32 bit |
 | `uart` | 2 | TX and RX FIFOs, 256 B each |
-| PSRAM IP | 0 | (18 RAM16 shadow-SRAM cells) |
+| `arb` | 0 | (16 RAM16 shadow-SRAM cells: the 8-entry write-beat buffer) |
 
 Two blocks are left. A second line buffer, a larger TLB or a deeper cache would need block
 RAM taken from elsewhere.
@@ -449,6 +474,9 @@ RAM taken from elsewhere.
 | sv32_mmu | micro-TLB | one page per bus (VPN, PPN, flags), registers |
 | Sparrow-SERV | register file | 32 GPRs + 8 CSR slots (mtvec, mscratch, mepc, mtval, stvec, sscratch, sepc, stval), 4 bits per access |
 | amo_unit | reservation | one word address + valid |
+| psram_arb | write-beat buffer | 8 beats of 32 bits + a 4-bit mask, in RAM16 |
+| psram_arb | owner queue | which master each outstanding read belongs to |
+| hyperram_x16 | read FIFOs | 8 words of 16 bits per die (+ a filler flag) |
 | uart_16550 | TX / RX FIFO | 256 B each |
 | video | line buffer | 2 halves × 320 words; pixel x is halfword x[0] of word x[9:1] |
 | video | text buffer | 1200 words of two cells, write-only from the CPU |
@@ -461,8 +489,8 @@ RAM taken from elsewhere.
   With the old 16-byte FIFO, polled output drained 16 bytes per 10 ms tick.
 - **Video: two line buffers.** The DMA fills line n while line n − 1 is shown. Line n is
   requested 960 pixel clocks before it is needed (1,600 CPU cycles) and its fetch takes
-  760 cycles when the channel is free (§4.5). A line that is not complete at its start is
-  shown black, and a sticky underflow bit is set.
+  720 cycles when the CPU leaves the PSRAM alone (§4.5). A line that is not complete at its
+  start is shown black, and a sticky underflow bit is set.
 - **The SPI master stalls the bus.** An access waits (no ack) while a byte or word shifts,
   so software needs no polling and there is no FIFO.
 - **The flash window streams.** CS stays low between sequential word reads, so consecutive
@@ -472,39 +500,61 @@ RAM taken from elsewhere.
 
 | item | value |
 |---|---|
-| device | 64 Mbit PSRAM in the package: two 32 Mbit dies, one per IP channel |
-| controller | Gowin PSRAM Memory Interface HS 2CH, generated for 135 MHz in the ov7670 project; run at 84 MHz |
-| user port per channel | 32-bit data, 21-bit word address, 4-bit byte mask (1 = byte not written) |
-| burst | 8 beats of 32 bits = 32 B, wrapping inside its 32-byte group |
-| read latency | 16 cpu_clk cycles from the command (15–17 on hardware, depending on calibration; the cache waits for `rd_data_valid`) |
-| command spacing | TCMD = 19 cycles per channel; 18 still works, ≤ 17 silently corrupts data |
-| address map | CPU byte address bit 22 selects the channel, so each 4 MB half is one die |
+| device | 64 Mbit PSRAM in the package: two 32 Mbit W955D8MBYA dies |
+| controller | `rtl/psram/hyperram_x16.v` ([psram_controller.md](psram_controller.md)): both dies in lockstep as one 16-bit DDR bus, die 0 on DQ[7:0], die 1 on DQ[15:8]; CK = cpu_clk, 90° later; no calibration |
+| configuration | CR0 = `0x8FEE`: fixed initial latency 3, wrapped bursts of 16 bytes per die (32 per line), 34 Ω drive |
+| user port | 32-bit data per beat ({die 1 word, die 0 word}), 21-bit word address, 4-bit byte mask (1 = byte not written), a last-beat flag for writes |
+| burst | 8 beats of 32 bits = 32 B, wrapping inside the line from the addressed word |
+| bus timing | cycles 0–2 command-address, 3–7 latency, 8–15 data, 16–17 CS# high: 18 cycles per line. A write ends after its last enabled beat: an uncached word write takes 11 |
+| read latency | beat k 16 + k cycles after the controller takes the command; a line fill's first beat 17 cycles after the arbiter's grant |
+| read capture | words found from RWDS into per-die 8-word FIFOs; a word missing at the end of the 16-cycle window becomes a filler with `o_rerr` (SYSCON word 2 counts them; it must stay 0) |
+| initialization | RESET# 2 µs, 160 µs (tVCS), then the CR0 write: ready ~0.2 ms after reset |
+| address map | the CPU's byte address bits 22:2 are the word address on both dies; die 0 holds the low halfword of every 32-bit word, die 1 the high one |
 
-`rtl/sim/psram_ui_model.v` was matched edge for edge to the IP's gate-level netlist
-(`verif/psram/`), and every bench uses it.
+`rtl/sim/hyperram_x16_model.v` is the controller's command interface as a cycle model with
+8 MB behind it; the cache, video and SoC simulations run against it, and
+`verif/psram16/run.sh` checks that it takes exactly as many cycles as the controller. On the
+board the CPU-less probe `fpga/probe_psram16/` passed all 8 MB on both dies at every CK phase
+from 22.5° to 157.5°.
+
+Until 2026-11-11 the SoC used Gowin's PSRAM Memory Interface HS 2CH (a netlist generated for
+135 MHz in the ov7670 project, run at memory_clk 84 MHz): two 4 MB channels selected by
+address bit 22, one burst per channel per TCMD = 19 cycles, a read latency of 16 cycles
+(15–17 on hardware, depending on calibration). Its model `rtl/sim/psram_ui_model.v` and
+`verif/psram/` are kept as a record.
 
 ### 4.5 Arbitration and bandwidth
 
-`psram_arb` grants in the cycle a master asks:
-- **The cache goes first.** The DMA takes a channel the cache is not using.
+`psram_arb` grants in the cycle a master asks, when the controller is ready and no command
+is waiting for it:
+- **The cache goes first.** The DMA takes the bus when the cache is not asking.
 - **The DMA goes first when urgent.** It flags urgency once the time left in its line window
-  no longer covers the bursts it still has to issue (19 cycles each) plus the read latency
-  and a margin. A CPU miss then waits at most one video burst.
-- **One write stream.** Both channels' write data and masks carry the cache's single write
-  stream, so a write is not granted within 8 cycles of another write on either channel.
-- **Read beats** go to the master whose read is the oldest outstanding on that channel. Up
-  to two reads can be in flight per channel.
+  no longer covers the bursts it still has to issue (`TBURST` = 18 cycles each) plus
+  `MARGIN` = 66 cycles: a CPU command already running, the last read's data, the
+  synchronizers.
+- **One command at a time.** The granted command is registered, and the controller takes it
+  in the next cycle.
+- **Write beats** go into an 8-entry buffer: the cache sends beat k k cycles after the grant,
+  and the controller asks for it from cycle 9 on. `o_wlast` marks the last beat with an
+  enabled byte, so an uncached word write ends after one beat.
+- **Read beats** go to the master that asked, through a queue of owners: a read's beats can
+  still arrive after the next command has started. The DMA keeps at most two reads
+  outstanding and 8 cycles between its grants.
 
 Bandwidth:
 
 | item | value |
 |---|---|
-| one channel | one 32 B burst per 19 cycles: 70.7 MB/s; both channels 141 MB/s |
-| video | 1280 B per 31.75 µs line: 36.9 MB/s average; 57% of one channel during active lines |
-| CPU | at most one access in flight. A hit costs 2 cycles of latency; a miss adds a line fill (the 16-cycle read latency plus 8 beats) and a second lookup, plus a write-back burst if the victim is dirty |
+| the PSRAM bus | one 32 B line per 18 cycles: 74.7 MB/s at 42 MHz, shared by the CPU and video (the IP had two channels of 70.7 MB/s, 141 MB/s in all) |
+| video | 1280 B per 31.75 µs line: 36.9 MB/s average; 720 of every 1,333 cycles during an active line (~54%) |
+| CPU | at most one access in flight. A hit costs 2 cycles of latency; a miss adds a line fill (the first beat 17 cycles after the grant, then one beat per cycle) and a second lookup, plus a write-back burst if the victim is dirty |
 
-Turning the video on did not change the kernel's boot time measurably (§1.2): the CPU's
-miss traffic is small next to its compute time.
+In simulation, `verif/video/run_sys.sh` (worst-case CPU traffic under scan-out) has no
+underflow, with a minimum deadline slack of 17 cycles, and `verif/cache/run.sh` measures the
+DMA at 33.6 cycles per burst under random CPU traffic. On the board the kernel reaches
+`Run /init` 0.2 s later than on the IP's two channels (§1.2). With the IP, turning the video
+on did not change the kernel's boot time measurably: the CPU's miss traffic is small next to
+its compute time.
 
 ### 4.6 Alignment and staging contract
 
@@ -644,7 +694,7 @@ lane sends `1111100000` through a fourth `OSER10`, so it shares the data lanes' 
 | crystal, UART, flash, I2C, SD | LVCMOS33, bank 3.3 V | pull-ups on inputs and CS lines; drive 8 mA on outputs; I2C open drain with the weak pull-up |
 | reset button, LEDs | 1.8 V bank | pull-up; LEDs drive 8 mA, active low |
 | HDMI | `ELVDS_OBUF`, bank 1 | no pull, drive 8 mA; no on-chip termination (the monitor terminates) |
-| PSRAM | set by the IP | — |
+| PSRAM | internal pads, placed by port name (`O_psram_ck`, `O_psram_ck_n`, `IO_psram_rwds`, `O_psram_reset_n`, `IO_psram_dq`, `O_psram_cs_n`) | `ODDR`/`IDDR` cells; die 0's CK on two single-ended pins, die 1's CK pair through `ELVDS_OBUF` (§2.5) |
 
 The flash pins 59–62 are dual-purpose MSPI configuration pins. The build passes
 `-use_mspi_as_gpio 1 -use_sspi_as_gpio 1`; a build from the IDE needs the same setting.
@@ -660,8 +710,8 @@ The flash pins 59–62 are dual-purpose MSPI configuration pins. The build passe
 | CPU, instruction by instruction | directed tests in lockstep with a Python reference model of the core (`iss.py`): CSRs, privilege, traps, MMU, AMOs, CMOs; W=4 and W=1, 0 and 1 wait states | `verif/qerv/run_directed.sh` |
 | CPU, compliance | riscv-tests rv32ui/um/ua (and rv32si, rv32ui-v with the MMU) at both widths | `verif/qerv/run_riscv_tests.sh` |
 | CPU, cycle costs | per-class CPI against a Python ISS | `perf/serv_cpi/run.sh` |
-| PSRAM model | the model replayed against the IP netlist's recorded trace; `--ip` simulates the netlist itself (~1 h) | `verif/psram/run.sh` |
-| cache + arbiter | random cached, uncached and CMO traffic on an 8-line cache, with and without a DMA reader; PSRAM checked through the model's backdoor; the model's protocol checker must stay silent | `verif/cache/run.sh` |
+| PSRAM controller | the controller against two W955D8MBYA die models with protocol checkers, at CK phases 45° and 90° and seeds 1 and 7 (2,000 operations each), every beat checked and no filler allowed; the cycle model must match it cycle for cycle; the board probe's memory test on 64 lines. Gowin's primitives are stood in for by `rtl/sim/gowin_io_sim.v` | `verif/psram16/run.sh` (~20 s) |
+| cache + arbiter | random cached, uncached and CMO traffic on an 8-line cache, with and without a DMA reader; PSRAM checked through the cycle model's backdoor; the model's checker (no command while the controller is not ready) must stay silent | `verif/cache/run.sh` |
 | video | TMDS, timing, the PHY's serial output; text frames against a reference model | `verif/video/run.sh` |
 | video under load | cache + arbiter + video controller at 42 / 25.2 MHz under worst-case CPU traffic, every pixel checked | `verif/video/run_sys.sh` |
 | peripherals | UART (FIFO, overrun, IIR), I2C (against an EEPROM model), SPI (against a mode-0 slave), flash reader | `verif/uart`, `verif/i2c`, `verif/spi`, `verif/spi_flash` |
@@ -692,10 +742,14 @@ The flash pins 59–62 are dual-purpose MSPI configuration pins. The build passe
 
 ### 7.4 On-chip debug and observability
 
-- **SYSCON status words:** PSRAM calibration, commands and read beats per channel, cache
-  misses and write-backs, the video STATUS (frame counter, underflow). The boot ROM's `s`
-  prints them; Linux reads them with `devmem`.
-- **LEDs:** heartbeat, PLL lock, PSRAM calibrated, UART TX, in reset, powered off.
+- **SYSCON status words:** 0 PSRAM ready (3), 1 PSRAM commands taken, 2 read beats with a
+  filler word (should stay 0), 3 read beats, 5 cache misses, 6 write-backs, and the video
+  STATUS (frame counter, underflow). The boot ROM's `s` prints them; `qerv_boot.py` names
+  them `init cmd fill rdv - miss wb`; Linux reads them with `devmem`.
+- **LEDs:** heartbeat, PLL lock, PSRAM ready (`o_init_done`), UART TX, in reset, powered off.
+- **Controller diagnostics:** `hyperram_x16` reports the bus cycle of each die's first word
+  in the last read and its alignment (`o_rlat0/1`, `o_ralign`); the SoC build leaves them
+  unconnected, and the probe `fpga/probe_psram16/` prints them.
 - **Kernel profiling** on the board: `CONFIG_PROFILING` with `profile=5`; `initcall_debug`.
 - **No logic analyser core** is in the design (no room).
 
@@ -707,8 +761,8 @@ The flash pins 59–62 are dual-purpose MSPI configuration pins. The build passe
 
 ```mermaid
 flowchart LR
-  RTL["rtl/** + external/sparrow-serv<br/>+ PSRAM IP netlist"] --> SIM["Icarus benches<br/>Verilator SoC"]
-  PREP["fpga/build.sh prep<br/>boot ROM hex, tang9k_cfg.v,<br/>tang9k_soc.sdc"] --> PRJ
+  RTL["rtl/** + external/sparrow-serv"] --> SIM["Icarus benches<br/>Verilator SoC"]
+  PREP["fpga/build.sh prep<br/>boot ROM hex, tang9k_cfg.v,<br/>tang9k_soc.sdc (SDC_UNCERT)"] --> PRJ
   RTL --> PRJ["fpga/tang9k_soc.gprj"]
   PRJ --> SYN["GowinSyn"]
   CST["tang9k_soc.cst"] --> PNR
@@ -720,7 +774,7 @@ flowchart LR
 
 `fpga/build.sh` (`SMODE=1 VIDEO=1` for the current system):
 - writes `fpga/build/`: the boot ROM hex, `tang9k_cfg.v` (CPU clock, baud, SMODE, video,
-  font path) and the SDC;
+  font path) and the SDC (`SDC_UNCERT` replaces its guard band, §8.2);
 - runs `scripts/gw_run.sh`, which drives `gw_sh` headless for synthesis and PnR.
 
 A full build takes about 2 minutes. The board tools are in `sw/tools/`. The Claude Code
@@ -731,10 +785,11 @@ steps.
 
 | constraint | where | content |
 |---|---|---|
-| clocks | `tang9k_soc.sdc` | `clk27` (37.037 ns); generated `memory_clk` (× 28 / 9), `cpu_clk` (÷ 2 at the IP's CLKDIV); with video, `hdmi_fclk` (× 14 / 3) and `pix_clk` (÷ 5) |
-| exceptions | `tang9k_soc.sdc` | `set_multicycle_path` 2 / 1 from memory_clk to cpu_clk; 5 asynchronous `set_clock_groups` (§3.3) |
-| over-constraint | `SDC_MEM_MULT` in `fpga/build.sh` | raises the analysed clocks for the placer only (default 28 = none; 29 and 30 made placement worse) |
-| pins | `tang9k_soc.cst` | `IO_LOC` and `IO_PORT` for the 28 user ports (§6.6); the PSRAM pins come from the IP |
+| clocks | `tang9k_soc.sdc` | `clk27` (37.037 ns); generated `cpu_clk` and `ck_clk` (× 14 / 9, ck_clk with `-phase 90`); with video, `hdmi_fclk` (× 14 / 3) and `pix_clk` (÷ 5) |
+| exceptions | `tang9k_soc.sdc` | 4 asynchronous `set_clock_groups` (§3.3); no multicycle paths |
+| guard band | `tang9k_soc.sdc` | `set_clock_uncertainty 1.5 -setup` from cpu_clk to cpu_clk and to ck_clk: the placer and the analysis keep 1.5 ns of every period in reserve; `SDC_UNCERT=<ns>` in `fpga/build.sh` tries another value |
+| reporting | `tang9k_soc.sdc` | `report_timing -setup -max_paths 200`, so a build that eats into its guard band lists every such endpoint |
+| pins | `tang9k_soc.cst` | `IO_LOC` and `IO_PORT` for the 28 user ports (§6.6); the PSRAM pins are internal pads, placed by port name |
 | options | `GW_OPTIONS` | `-use_mspi_as_gpio 1 -use_sspi_as_gpio 1` |
 
 ### 8.3 RTL rules for timing closure
@@ -757,25 +812,35 @@ Each rule was learned from a failed or marginal closure:
    request (`cmo_q`), so the CPU's instruction decode does not reach its state logic
    (42.085 → 42.126 MHz).
 6. **Reset nets are registered and few.** `cpu_rst` is a flop; the reset trees use LW wires.
-7. **Fmax swings with placement.** The same design has made 42.1–45.7 MHz. A change that
-   passes once can fail the next build, so check every build (§8.4).
+7. **Fmax swings with placement.** With the IP, the same design made 42.1–45.7 MHz. With the
+   controller, the constraints alone moved it from 39.3 to 45.2 MHz (Gowin's PnR is
+   deterministic, so the same input gives the same result). Keep a setup guard band in the
+   SDC, retry other values (`SDC_UNCERT`) when a change costs timing, and check every build
+   (§8.4).
 
 ### 8.4 Timing results
 
-Post-route, the 2026-11-11 build:
+Post-route, `tang9k_soc_unc.fs` (2026-11-11, cpu_clk at 42 MHz with a 1.5 ns setup guard
+band):
 
 | metric | value |
 |---|---|
-| setup | TNS 0 on every clock; cpu_clk WNS +0.072 ns, Fmax 42.126 MHz |
-| hold | 12 of the listed paths negative, worst −0.812 ns, all inside the PSRAM IP (its calibration flag into its input deserializers, cpu_clk → memory_clk); the TNS table reports 0. A known class from the ov7670 build; user constraints cannot clear it |
-| recovery / removal | worst +1.546 / +1.183 ns (the pixel reset into the serializers) |
-| pix_clk | Fmax 28.507 MHz against 25.2 |
-| high fanout | cpu_clk 3,327 loads; the SoC reset 699; pix_clk 304 |
+| setup | TNS 0 on every clock with the guard band; cpu_clk worst slack +0.175 ns with it, +1.675 ns without. Fmax 42.310 MHz with the band, 45.177 MHz without (13 levels) |
+| hold | no violations (the IP's 12 IP-internal hold paths are gone with it) |
+| pix_clk | Fmax 31.438 MHz against 25.2 |
+| clk27 | Fmax 198 MHz |
 
-The worst setup paths all start at SERV's decoded `funct3` register and end in the CSR
-block (satp) or the register file's write data: the CPU's own logic, 10 levels.
+The worst setup paths are the CPU's own logic: the register file's read port and SERV's
+buffer registers to the register file's write data (`rf_ram_if`) and the AMO unit's write
+data, and SERV's immediate decoder to the CSR block.
 
-The cpu_clk history:
+Gowin's slack and Fmax include the uncertainty (each path lists it as `tUnc`), so real
+Fmax = 1 / (1 / Fmax − 1.5 ns).
+`.claude/skills/upload-bitstream/scripts/timing_summary.py` adds each listed path's
+uncertainty back: a build that eats into its guard band but still meets 42 MHz passes, with
+a note on the clock line.
+
+The cpu_clk history (the rows before the 16-bit controller are with Gowin's PSRAM IP):
 
 | change | cpu_clk Fmax (target) |
 |---|---|
@@ -787,6 +852,9 @@ The cpu_clk history:
 | I2C + SD, before the SC compare was registered | 38.4–39.9 MHz |
 | SD hardware CRC (+7 LUTs) | 42.25 MHz |
 | Zicbom, before / after latching the CMO in the cache | 42.085 / 42.126 MHz |
+| 16-bit PSRAM controller, no guard band | 39.3 MHz (42) |
+| the same, over-constrained to 45 / 48 / 51 MHz (the placer's clock, not the board's) | 42.58 / 45.0 / 41.96 MHz (42) |
+| the same, 42 MHz with a setup uncertainty of 1.5 / 2.0 / 2.5 / 3.0 ns (real Fmax, without the band) | 45.18 / 42.02 / 44.58 / 42.23 MHz (42) |
 
 ### 8.5 Utilization against the headroom guideline
 
@@ -794,52 +862,61 @@ The usual guideline keeps 20–30% headroom for timing closure and later changes
 
 | resource | used | available | utilization | against 70–80% |
 |---|---:|---:|---:|---|
-| logic (LUT + ALU + RAM16) | 6,352 (5,120 LUT, 1,124 ALU, 18 RAM16) | 8,640 | 74% | **at the limit** |
-| registers | 3,605 | 6,771 | 54% | within |
-| CLS (logic sites in use) | 3,713 | 4,320 | 86% | **over** |
+| logic (LUT + ALU + RAM16) | 5,584 (4,455 LUT, 1,033 ALU, 16 RAM16) | 8,640 | 65% | within |
+| registers | 3,209 | 6,771 | 48% | within |
+| CLS (logic sites in use) | 3,715 | 4,320 | 86% | **over** |
 | BSRAM | 24 | 26 | 93% | **over** |
 | DSP | 2 | 10 | 20% | well within |
 | I/O ports | 28 | 71 | 40% | within |
-| LW clock wires | 8 | 8 | 100% | **full** |
+| IOLOGIC | 49 (18 `IDDR`, 23 `ODDR`, 4 `OSER10`) | 97 | 51% | within |
+| LW clock wires | 7 | 8 | 88% | **over** |
 | rPLL | 2 | 2 | 100% | **full** |
+
+With Gowin's PSRAM IP the same system used 6,352 logic (74%: 5,120 LUT, 1,124 ALU,
+18 RAM16), 3,605 registers, 3,713 CLS (86%) and all 8 LW wires.
 
 Logic by block (GowinSyn, LUT + ALU):
 
 | block | LUT + ALU | registers |
 |---|---:|---:|
-| CPU (core 690, MMU 347, MDU 421, AMO 355) | 1,813 | 892 |
-| PSRAM IP | 1,178 | 753 |
-| video | 852 | 534 |
+| CPU (core 705, MMU 344, MDU 443, AMO 354) | 1,846 | 892 |
+| PSRAM controller (the IP was 1,178 / 753) | 493 | 458 |
+| video | 883 | 534 |
 | CLINT | 359 | 178 |
-| cache | 337 | 193 |
-| UART | 279 | 158 |
-| I2C | 224 | 150 |
-| SYSCON | 194 | 35 |
-| SPI master | 155 | 153 |
-| arbiter | 154 | 105 |
+| cache | 304 | 193 |
+| UART | 282 | 158 |
+| I2C | 233 | 150 |
+| SYSCON | 180 | 35 |
+| SPI master | 156 | 153 |
+| arbiter | 81 (+ 16 RAM16: the write buffer) | 36 |
 | flash window | 124 | 138 |
 | PLIC | 69 | 18 |
-| top-level glue | 403 | 297 |
+| top-level glue | 388 | 266 |
 
 What this means for the next change:
 - **Block RAM and clock wires are nearly gone.** Two BSRAM blocks are left; no PLL is free;
-  all LW wires are taken.
-- **Logic is tight, and timing has no slack.** A new block costs placement freedom, and the
-  CPU's own paths are the worst ones. Measure CPU changes alone with the fit probes
+  one LW wire is left.
+- **Logic has room again; placement is still congested.** Replacing the IP freed 768 logic,
+  but 86% of the logic sites are in use. A new block costs placement freedom, and the CPU's
+  own paths are the worst ones. Measure CPU changes alone with the fit probes
   (`fit/qerv_linux/`), then in the full build.
+- **Timing has slack, through the guard band.** cpu_clk has +1.675 ns at 42 MHz with the
+  SDC's 1.5 ns setup uncertainty; without it the same design placed to 39.3 MHz. Retry
+  other `SDC_UNCERT` values when a change costs timing.
 
 ### 8.6 Bitstream generation, version control and handoff
 
 **Identity.** There are no build numbers. A bitstream that goes on the board is copied to
-`/mnt/data/build/tang9k_linux/tang9k_soc_<tag>.fs` (`cbo`, `irq`, `text`, ...); the flash
-images to `flash_mmu_<tag>.bin`. CLAUDE.md's "What the board holds now" records which pair
+`/mnt/data/build/tang9k_linux/tang9k_soc_<tag>.fs` (`unc`, `hr16`, `cbo`, `irq`, ...); the
+flash images to `flash_mmu_<tag>.bin`. CLAUDE.md's "What the board holds now" records which pair
 is in the flashes. A kernel and a bitstream go together: the DT describes the devices of one
 bitstream.
 
 **Version control.**
-- In git: the RTL, the constraints, the project file, the hand-written rPLL wrappers, the PSRAM
-  IP as generated (copied unchanged from the ov7670 project), the boot ROM, the Buildroot
-  tree with the kernel configs, DTs and patches.
+- In git: the RTL (with the PSRAM controller), the constraints, the project file, the
+  hand-written rPLL wrappers, the boot ROM, the Buildroot tree with the kernel configs, DTs
+  and patches. The retired Gowin PSRAM IP stays as generated (copied unchanged from the
+  ov7670 project), for the calibration probe `fpga/probe/` only.
 - The CPU core is the `external/sparrow-serv` submodule (branch `qerv-linux`). A core change
   is committed and pushed there first, then the submodule pointer here.
 - Build output (`fpga/impl/`, `fpga/build/`, `$WORK`) is not tracked.
@@ -861,13 +938,18 @@ bitstream.
 - **microSD writes.** In the first write test, most of a 512 KB file read back as zeros,
   with no error logged. Later boots found no card at all. Open
   ([peripherals.md](peripherals.md)).
-- **No timing headroom.** cpu_clk meets 42 MHz by 0.072 ns. Fmax moves with placement.
-- **Resources nearly gone.** 93% of BSRAM, 86% of CLS, all LW clock wires and both rPLLs
+- **Timing headroom comes from the constraint.** cpu_clk makes 45.2 MHz against 42
+  (+1.675 ns) when placed with a 1.5 ns setup guard band. Without it the same design made
+  39.3 MHz, and with 2.0 ns only 42.0 MHz. A change can move it below 42 MHz, so check every
+  build with `timing_summary.py` and retry other `SDC_UNCERT` values.
+- **Resources nearly gone.** 93% of BSRAM, 86% of CLS, 7 of 8 LW clock wires and both rPLLs
   (§8.5).
-- **PSRAM IP hold violations.** Twelve listed paths inside the IP, worst −0.812 ns, as in the
-  ov7670 build. The board has calibrated and run reliably with them.
-- **The PSRAM IP cannot be regenerated here.** The IDE's IP generation fails on the licence,
-  and the 2-channel IP is under "Deprecated". The memory clock must avoid ~77.6–81 MHz.
+- **One PSRAM bus for the CPU and video.** 74.7 MB/s, of which scan-out takes about 54%
+  during active lines (the IP had two channels of 70.7 MB/s). No underflow has been seen on
+  the board or in simulation; the kernel boots 0.2 s slower than with the IP.
+- **The CK phase window was measured on one board.** 22.5–157.5° pass there, and the SoC uses
+  90°, the middle. SYSCON word 2 counts filler beats (a die missed a word in the capture
+  window) and must stay 0.
 - **CPU gaps.** No illegal-instruction trap, no `mstatus.MPRV` (riscv-tests `rv32si-p-dirty`
   skipped), no FPU, no C extension, no `cycle`/`instret` counters, no M external interrupt,
   no `menvcfg`. Misaligned accesses trap and are emulated by Linux.
@@ -894,18 +976,22 @@ bitstream.
 fpga/
   tang9k_soc.gprj         Gowin project (file list)
   build.sh                prep (boot ROM hex, tang9k_cfg.v, SDC) + synthesis + PnR
-  src/tang9k_top.v        board top: PLLs, PSRAM IP, reset, video clocks, SoC, HDMI PHY
+  src/tang9k_top.v        board top: PLL, PSRAM controller, reset, video clocks, SoC, HDMI PHY
   src/tang9k_soc.cst/.sdc pins; clocks and clock groups
-  src/gowin_rpll/         hand-written rPLL wrappers (84 MHz, 126 MHz)
-  src/psram_memory_interface_hs_2ch/   Gowin PSRAM IP netlist (from the ov7670 project)
-  probe/, probe_hdmi/     CPU-less probes: PSRAM calibration per clock, HDMI colour bars
+  src/gowin_rpll/         hand-written rPLL wrappers (42 MHz + 90°, 126 MHz)
+  src/psram_memory_interface_hs_2ch/   the retired Gowin PSRAM IP netlist, for probe/
+  probe/                  CPU-less probe: the Gowin IP's calibration per memory clock
+  probe_psram16/          CPU-less probe: the 16-bit controller's 8 MB memory test
+  probe_hdmi/             CPU-less probe: HDMI colour bars
 rtl/
   qerv/                   qerv_cpu (Sparrow-SERV + MDU + AMO + MMU), sv32_mmu, amo_unit
   soc/                    soc_top, l1_cache, psram_arb, uart_16550, clint, plic, syscon,
                           spi_master, spi_flash_xip, bootrom
+  psram/                  hyperram_x16, the 16-bit PSRAM controller
   video/                  video_ctrl, video_dma, video_out, tmds_encoder, hdmi_phy_gowin, font
   i2c/                    OpenCores I2C master
-  sim/                    PSRAM, SPI flash and I2C EEPROM models
+  sim/                    the PSRAM controller's cycle model, ODDR/IDDR/ELVDS_OBUF stand-ins,
+                          SPI flash and I2C EEPROM models; the retired IP's model
 external/
   sparrow-serv/           the CPU core (fork of SERV)
   mdu/                    the M-extension unit
@@ -917,7 +1003,8 @@ sw/
   mkflash.py              SPI flash image
   tests/                  bare-metal SoC tests
 sim/soc/                  Verilator whole-SoC simulation, profiler
-verif/                    unit benches: qerv, cache, psram, video, uart, i2c, spi, spi_flash
+verif/                    unit benches: qerv, cache, psram16, video, uart, i2c, spi, spi_flash
+                          (psram: the retired IP's model, kept as a record)
 fit/                      fit probes: one CPU core alone on the GW1NR-9
 perf/                     boot-time model: CPI measurement, emulator boot traces
 scripts/                  gw_run.sh / gw_run.tcl (headless Gowin)

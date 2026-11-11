@@ -38,7 +38,7 @@ OBJ="$WORK/verilator-soc-$TAG"
 
 "$REPO/sw/bootrom/build.sh" "$OBJ/bootrom.hex" > /dev/null
 
-SRCS=("$HERE/tb_soc.v" "$REPO"/rtl/soc/*.v "$REPO"/rtl/i2c/*.v "$REPO"/rtl/qerv/*.v "$REPO/rtl/sim/psram_ui_model.v" "$REPO/rtl/sim/spi_flash_model.v" "$REPO/rtl/sim/i2c_eeprom_model.v"
+SRCS=("$HERE/tb_soc.v" "$REPO"/rtl/soc/*.v "$REPO"/rtl/i2c/*.v "$REPO"/rtl/qerv/*.v "$REPO/rtl/sim/hyperram_x16_model.v" "$REPO/rtl/sim/spi_flash_model.v" "$REPO/rtl/sim/i2c_eeprom_model.v"
       "$REPO/rtl/video/video_ctrl.v" "$REPO/rtl/video/video_dma.v" "$REPO/rtl/video/video_out.v" "$REPO/rtl/video/tmds_encoder.v"
       "$REPO/external/mdu/rtl/mdu_top.v" "$REPO/external/sparrow-serv/servile/servile_arbiter.v")
 for f in "$REPO"/external/sparrow-serv/rtl/*.v; do

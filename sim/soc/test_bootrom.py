@@ -2,11 +2,11 @@
 """Boot ROM command test on the Verilator SoC model (sim/soc/run.sh, ~1 min plus the build).
 
 Sends one command per "> " prompt (see sw/bootrom/bootrom.S) and checks the replies:
-  - memtest over 64 KB across the PSRAM channel boundary (bit 22) and larger than the cache
+  - memtest over 64 KB across the middle of the PSRAM (bit 22) and larger than the cache
   - memtest over the boot ROM, which must FAIL at its first word (writes are ignored)
   - load of an odd-length random block: the "ok" hash must match the data
   - hash of the same memory: the data must have landed in PSRAM
-  - status: both PSRAM channels calibrated (SYSCON word 0 = 3)
+  - status: the PSRAM controller initialized (SYSCON word 0 = 3)
   - an unknown command ("?"), then poweroff, which ends the simulation
 """
 import os
@@ -41,17 +41,21 @@ def main():
     with open(path, "wb") as f:
         f.write(recs)
     log_path = os.path.join(HERE, "results", f"soc_w{w}.rom_test.log")
+    if os.path.exists(log_path):          # a failed build must not leave an old log to check
+        os.remove(log_path)
     env = dict(os.environ, ROM_INPUT=path, QUIET="1", MAX_CYCLES="60000000", UART_LOG=log_path)
     r = subprocess.run([os.path.join(HERE, "run.sh")], env=env, capture_output=True, text=True)
     sys.stderr.write(r.stderr[-600:])
+    if not os.path.exists(log_path):
+        sys.exit(f"FAIL: no UART log (sim/soc/run.sh exit {r.returncode})")
     log = open(log_path, errors="replace", newline="").read()
     print(log.replace("\r", ""))
 
     h = f"{djb(blob):08x}"
     checks = [
         ("banner", "QERV boot ROM" in log),
-        ("status: both channels calibrated", re.search(r"status 00000003 (?:[0-9a-f]{8} ){6}", log)),
-        ("memtest 64 KB across channels ok", re.search(r"memtest w\.r\.w\.r\.bok", log)),
+        ("status: PSRAM ready", re.search(r"status 00000003 (?:[0-9a-f]{8} ){6}", log)),
+        ("memtest 64 KB across 4 MB ok", re.search(r"memtest w\.r\.w\.r\.bok", log)),
         ("memtest on ROM fails at 0", re.search(r"FAIL n=[0-9a-f]{8} @00000000", log)),
         ("load hash", log.count(f"ok {h}") >= 1),
         ("memory hash", log.count(f"ok {h}") == 2),

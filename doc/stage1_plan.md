@@ -3,6 +3,10 @@
 Status: proposed 2026-11-10; M0, M1 and M2 met 2026-11-10. Background measurements are in `CLAUDE.md` (fit results, boot-time
 estimate) and in `fit/`, `perf/`.
 
+The PSRAM notes below (Gowin's IP, memory_clk, calibration, the two channels) describe stage
+1 as it was built. Since 2026-11-11 the SoC uses the project's own 16-bit controller instead
+(`doc/psram_controller.md`).
+
 ## Goal and definition of done
 
 Boot a mainline RV32 no-MMU Linux kernel in M-mode to an interactive busybox shell on the Tang
@@ -250,8 +254,8 @@ cost in the budget below.
 
 Done when PnR closes at 27 MHz with margin and utilization is recorded.
 
-**Status (2026-11-10): met.** `fpga/build.sh` builds `fpga/tang9k_soc.gprj` (top
-`fpga/src/tang9k_top.v`).
+**Status (2026-11-10, with the Gowin PSRAM IP): met.** `fpga/build.sh` builds
+`fpga/tang9k_soc.gprj` (top `fpga/src/tang9k_top.v`).
 - **Clocks:** memory_clk 72 MHz (rPLL 27 × 8 / 3, written by hand in
   `fpga/src/gowin_rpll/gowin_rpll.v`); SoC on the IP's clk_out at 36 MHz, which divides the
   CLINT's 1 MHz and the 1 Mbaud UART exactly.

@@ -93,8 +93,9 @@ Two peripherals added after the video work (2026-11-11), both in the I/O region 
 ## Timing: the AMO unit's SC compare (found with these peripherals)
 
 - **The problem:** with I2C and SPI in (73% logic), the build reached 38.4–39.9 MHz against
-  42 MHz with every place/route option. Over-constraining the SDC (`SDC_MEM_MULT=29/30` in
-  `fpga/build.sh`) made it worse.
+  42 MHz with every place/route option. Over-constraining the SDC (`SDC_MEM_MULT=29/30`, the knob
+  `fpga/build.sh` had with the Gowin PSRAM IP; the SDC now has a setup guard band instead)
+  made it worse.
 - **The cause:** in most failing paths, the AMO unit's SC reservation compare
   (`res_adr == i_cpu_adr[31:2]`, a 30-bit carry chain) sat between the MMU's translated
   address and the core's ack. Synthesis shared that logic with the ack path.

@@ -5,21 +5,24 @@
 // line n shows framebuffer line (n + yoff) mod 480) are taken when line 0 is requested, so
 // new values apply from the next frame on.
 //
-// Pacing: at most two reads outstanding and at least 8 cycles between grants (two reads
-// never return beats in the same cycle, even on different channels); the arbiter keeps the
-// per-channel spacing, so a line takes 40 x 19 = 760 cycles when the channel is free.
+// Pacing: the PSRAM controller takes one 32-byte read per TBURST = 18 cycles (it is shared
+// with the CPU's cache through psram_arb), so a line takes 40 x 18 = 720 cycles when the CPU
+// leaves it alone. At most two reads outstanding and 8 cycles between grants (both kept from
+// the two-channel Gowin IP the SoC used until 2026-11; the controller's 18 cycles per command
+// bound the rate anyway).
 // Urgency: a line is due 960 pixel clocks after its request, but the next request comes
 // after 800, so each line must be complete within WINDOW = 800 pixel clocks of its request
 // (1333 system cycles at 42 MHz); otherwise requests pile up and every later line starts
 // short of time. The DMA asks the arbiter for priority over the CPU only once the time left
-// no longer covers the bursts still to issue (TCMD each) plus the read latency and a margin;
-// until then the CPU's misses go first.
+// no longer covers the bursts still to issue (TBURST each) plus a margin: a CPU command that
+// is already running (18), the last read's data (23 cycles after its command) and the
+// synchronizers. Until then the CPU's misses go first.
 `default_nettype none
 
 module video_dma #(
     parameter CLK_HZ = 42000000,
     parameter PIX_HZ = 25200000,
-    parameter TCMD   = 19
+    parameter TBURST = 18
 ) (
     input  wire        i_clk,
     input  wire        i_rst,
@@ -45,8 +48,8 @@ module video_dma #(
 
   localparam integer BURSTS = 40;                         // 640 pixels x 2 B / 32 B
   localparam integer WINDOW = 800 * (CLK_HZ / 1000) / (PIX_HZ / 1000);
-  localparam integer MARGIN = 48;                         // CDC, read latency, slack
-  localparam integer NEED0  = BURSTS * TCMD + MARGIN;
+  localparam integer MARGIN = 66;                         // CPU command, read latency, CDC
+  localparam integer NEED0  = BURSTS * TBURST + MARGIN;
 
   reg [2:0] req_s;
   wire      req_edge = req_s[2] != req_s[1];
@@ -105,7 +108,7 @@ module video_dma #(
       adr    <= adr + 18'd1;
       issued <= issued + 6'd1;
       gap    <= 3'd7;
-      need   <= need - TCMD[10:0];
+      need   <= need - TBURST[10:0];
     end
     outst <= outst + {1'b0, o_req & i_gnt} - {1'b0, i_rvalid & (wptr[2:0] == 3'd7)};
 

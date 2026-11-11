@@ -6,6 +6,13 @@ uploaded from the host and shown pixel-exact from PSRAM, then Linux (MMU kernel)
 16 KB cache, 8 MB PSRAM through the Gowin IP (see `doc/stage2_plan.md`). Progress and
 results are below the plan.
 
+Since 2026-11-11 the PSRAM goes through the project's own 16-bit controller
+(`doc/psram_controller.md`), not the Gowin IP: one bus, one 32 B line per 18 cycles
+(74.7 MB/s), shared by the cache and the DMA, instead of two channels with TCMD = 19. The DMA
+paces itself with `TBURST` = 18 and `MARGIN` = 66. The plan, progress and results below were
+written for the IP and are kept as they were, except where marked; the controller's
+simulation results are in `doc/psram_controller.md`.
+
 ## Goal and definition of done
 
 A simple display controller that scans an RGB565 framebuffer in PSRAM out to the board's
@@ -31,9 +38,9 @@ framebuffer console (option in V3).
 | TMDS bit rate | 252 Mbit/s per lane: `OSER10` with FCLK 126 MHz (DDR), PCLK 25.2 MHz |
 | Framebuffer | 640 × 480 × 2 B = 614,400 B (0x96000), stride 1280 B |
 | Bandwidth | 1280 B per 31.75 µs line = 40 PSRAM bursts of 32 B; 36.9 MB/s average |
-| PSRAM channel capacity | one 32 B burst per TCMD = 19 cycles at 42 MHz = 70.7 MB/s |
-| Line fetch cost | 40 × 19 = 760 cycles of the 1,333-cycle line period: **57%** of one channel during active lines, 52% averaged over the frame |
-| Fetch window (two line buffers) | from the end of line L−2's active part to the start of line L's: 960 pixel clocks = 1,600 CPU cycles, for 760 cycles of work |
+| PSRAM capacity | one 32 B line per 18 cycles at 42 MHz = 74.7 MB/s, shared with the CPU (with the IP: per channel, TCMD = 19, 70.7 MB/s) |
+| Line fetch cost | 40 × 18 = 720 cycles of the 1,333-cycle line period: about **54%** of the bus during active lines (with the IP: 40 × 19 = 760, 57% of one channel, 52% averaged over the frame) |
+| Fetch window (two line buffers) | from the end of line L−2's active part to the start of line L's: 960 pixel clocks = 1,600 CPU cycles, for 720 cycles of work (760 with the IP) |
 
 HDMI pins (from litex-boards `sipeed_tang_nano_9k.py`, same as Sipeed's examples): clock
 p/n 69/68, data0 71/70, data1 73/72, data2 75/74, as `ELVDS_OBUF` pairs with
@@ -43,10 +50,10 @@ ov7670 project drives its LCD on 68–75), so no LCD panel may be plugged in.
 ## Architecture
 
 ```
-            42 MHz (SoC clock, PSRAM clk_out)                  |   25.2 MHz pixel / 126 MHz serial
+            42 MHz (SoC clock and PSRAM)                       |   25.2 MHz pixel / 126 MHz serial
                                                                |
  CPU ── MMU ── bus ─┬─ 0x8xxx_xxxx ── l1_cache ──┐             |
-                    ├─ 0x9xxx_xxxx (uncached) ──┤ psram_arb ── PSRAM IP (2 channels)
+                    ├─ 0x9xxx_xxxx (uncached) ──┤ psram_arb ── hyperram_x16 (16-bit)
                     └─ 0x1120_0000 video regs   │     ▲        |
                                                 │     │ reads  |
                          video_dma (line fetch) ┘─────┘        |
@@ -86,6 +93,9 @@ ov7670 project drives its LCD on 68–75), so no LCD panel may be plugged in.
   - Line buffers: two `SDPB` (port A 32-bit write at 42 MHz, port B 16-bit read at
     25.2 MHz), one per line (640 × 16 bit each).
 - `rtl/soc/psram_arb.v` (new; between `l1_cache` and the IP):
+  - (As built for the IP. Since 2026-11-11 it hands the 16-bit controller one command at a
+    time, buffers the cache's write beats and routes read beats through one owner queue;
+    `doc/psram_controller.md`.)
   - It owns the per-channel TCMD counters and muxes the registered IP inputs. The 8-beat
     write stream needs no extra handling: TCMD (19) is longer than a burst.
   - It routes `rd_data_valid` beats to the master whose read is outstanding (a 2-deep owner
@@ -119,10 +129,10 @@ ov7670 project drives its LCD on 68–75), so no LCD panel may be plugged in.
   `sim/soc/run.sh` gets the same switch.
 
 ### Memory map and layout
-- **Framebuffer:** `0x8070_0000`–`0x8079_5FFF`, in channel 1 (byte address bit 22). The
-  CPU reaches it through the alias at `0x9070_0000`. It is clear of the kernel at
-  `0x8000_0000`, the SBI page `0x807F_E000` (also the RNG noise page) and the DTB at
-  `0x807F_F000`.
+- **Framebuffer:** `0x8070_0000`–`0x8079_5FFF` (in the IP's channel 1, byte address bit 22,
+  until 2026-11-11). The CPU reaches it through the alias at `0x9070_0000`. It is clear of
+  the kernel at `0x8000_0000`, the SBI page `0x807F_E000` (also the RNG noise page) and the
+  DTB at `0x807F_F000`.
 - **RAM cost:** Linux loses 600 KB of its 8 MB.
 
 ## Software
@@ -153,8 +163,9 @@ ov7670 project drives its LCD on 68–75), so no LCD panel may be plugged in.
   - Timing: counts, sync positions and polarity, DE.
   - PHY: deserialize the `OSER10` output in the TB and decode it. This catches D0…D9 order
     and p/n mistakes before the board.
-  - DMA + arbiter + cache, with `rtl/sim/psram_ui_model.v` and two clocks at a 5:3 ratio
-    with drift:
+  - DMA + arbiter + cache, with the PSRAM model (`rtl/sim/psram_ui_model.v` with the IP;
+    `rtl/sim/hyperram_x16_model.v` since 2026-11-11) and two clocks at a 5:3 ratio with
+    drift:
     - the cache's random-traffic test (`verif/cache/tb_cache.v`) still passes under
       continuous scanout;
     - the scanned pixels equal memory;

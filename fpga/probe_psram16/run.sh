@@ -77,7 +77,7 @@ while time.time() < end:
     buf += s.read(4096)
 seen = []
 for l in buf.decode(errors="replace").split("\r\n"):
-    if l.startswith(tag) and l not in seen and len(l) > 80:
+    if l.startswith(tag) and l not in seen and len(l) > 60:
         seen.append(l)
 print("\n".join(sorted(seen)) if seen else "no result lines (test still running, or no UART output)")
 PY

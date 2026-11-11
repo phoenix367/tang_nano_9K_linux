@@ -17,15 +17,16 @@
 #   f                            copy Image + DTB from the SPI flash (sw/mkflash.py layout),
 #                                then boot (in S-mode if header flag bit 0 is set)
 #   q / r                        SYSCON poweroff / reboot
-#   s                            status: SYSCON status words 0-10 (soc_top.v): PSRAM calib
-#                                bits, commands and read beats per channel, cache misses and
-#                                write-backs, 0, video CTRL, BASE, STATUS. Touches no PSRAM.
+#   s                            status: SYSCON status words 0-10 (soc_top.v): PSRAM ready
+#                                bits, commands, read beats with a filler word, read beats, 0,
+#                                cache misses and write-backs, 0, video CTRL, BASE, STATUS.
+#                                Touches no PSRAM.
 #   v <base>                     video (doc/video_plan.md): scan out the RGB565 framebuffer at
 #                                physical address base; base 0 = colour bars again. Load an
 #                                image first through the uncached alias (base + 0x10000000).
 #
-# m, c, b and f first wait up to 0.5 s for both PSRAM channels to calibrate, else print
-# "psram not calibrated" and the status. l does not check (its data would be read as
+# m, c, b and f first wait up to 0.5 s for the PSRAM controller to finish its initialization
+# (RESET#, the CR0 write; ~0.2 ms after reset), else print "psram not ready" and the status. l does not check (its data would be read as
 # commands): run s first.
 #
 # If no command arrives within AUTOBOOT_US of the first prompt and the flash holds an image,
@@ -560,7 +561,7 @@ splash:
     sub   t0, t0, t4
     li    t1, 500000
     bltu  t0, t1, 1b
-    j     9f                          # PSRAM not calibrated: no splash
+    j     9f                          # PSRAM not ready: no splash
 2:  lw    t0, 20(a0)                  # offset
     lw    a1, 24(a0)                  # length
     add   a0, a0, t0
@@ -646,8 +647,8 @@ cmd_status:
     jal   puts
     j     prompt
 
-# psram_ready: return once SYSCON status bits 1:0 (calib1, calib0) are both set; after 0.5 s
-# without them print the status and go back to the prompt (does not return)
+# psram_ready: return once SYSCON status bits 1:0 (the controller's init_done, in both) are
+# set; after 0.5 s without them print the status and go back to the prompt (does not return)
 psram_ready:
     li    t3, MTIME
     lw    t4, 0(t3)
@@ -661,7 +662,7 @@ psram_ready:
     sub   t0, t0, t4
     li    t1, 500000
     bltu  t0, t1, 1b
-    la    a0, msg_nocalib
+    la    a0, msg_noinit
     jal   puts
     j     cmd_status
 
@@ -736,4 +737,4 @@ msg_boot:     .asciz "boot\r\n"
 msg_boot_s:   .asciz "boot S\r\n"
 msg_mtrap:    .asciz "\r\nM trap: "
 msg_status:   .asciz "status "
-msg_nocalib:  .asciz "psram not calibrated\r\n"
+msg_noinit:   .asciz "psram not ready\r\n"

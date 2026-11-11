@@ -1,5 +1,5 @@
-// Tang Nano 9K pins for fpga/src/tang9k_top.v. The PSRAM pins (O_psram_*, IO_psram_*) are
-// placed by the PSRAM IP and need no IO_LOC. Flash pins from litex-boards
+// Tang Nano 9K pins for fpga/src/tang9k_top.v. The PSRAM pins (O_psram_*, IO_psram_*) are the
+// on-package dies' internal pads, placed by port name, and need no IO_LOC. Flash pins from litex-boards
 // sipeed_tang_nano_9k.py (the external 32 Mbit SPI NOR, not the embedded config flash).
 
 IO_LOC "clk_27m" 52;

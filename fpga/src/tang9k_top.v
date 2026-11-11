@@ -1,9 +1,9 @@
 // Board top for the QERV SoC on the Tang Nano 9K (milestone M3, doc/stage1_plan.md).
 //
-// Clocks: the 27 MHz crystal feeds the rPLL, which makes memory_clk, and also the PSRAM IP's
-// clk input (the IP needs the free-running reference there). The IP's clk_out
-// (= memory_clk / 2) clocks the whole SoC: one clock domain, as in simulation.
-// TANG9K_CPU_HZ (fpga/build/tang9k_cfg.v, written by fpga/build.sh) must equal clk_out; the
+// Clocks: the 27 MHz crystal feeds the rPLL, which makes the SoC clock (42 MHz, CLKOUT) and
+// the PSRAM's CK clock (the same, 90 degrees later, CLKOUTP). The PSRAM controller
+// (rtl/psram/hyperram_x16.v) runs on the SoC clock: one clock domain, as in simulation.
+// TANG9K_CPU_HZ (fpga/build/tang9k_cfg.v, written by fpga/build.sh) must equal CLKOUT; the
 // UART divider (CPU_HZ / TANG9K_UART_BAUD) and the CLINT's 1 MHz prescaler derive from it.
 //
 // Video (TANG9K_VIDEO, doc/video_plan.md): a second rPLL makes the 126 MHz TMDS clock, a
@@ -12,7 +12,7 @@
 // driven low.
 //
 // Reset: button S2 (system reset, see below). LEDs (active low, on = signal true):
-//   0 heartbeat (clk_out running)   1 PLL locked   2 PSRAM calibrated (both channels)
+//   0 heartbeat (the SoC clock running)   1 PLL locked   2 PSRAM initialized
 //   3 UART TX activity              4 SoC in reset  5 poweroff requested (SYSCON)
 `default_nettype none
 
@@ -34,7 +34,7 @@ module tang9k_top (
     output wire        sd_mosi,
     output wire        sd_cs_n,
     input  wire        sd_miso,
-    // on-package PSRAM: placed by the IP, no IO_LOC in the .cst
+    // on-package PSRAM: internal pads, placed by port name, no IO_LOC in the .cst
     output wire [ 1:0] O_psram_ck,
     output wire [ 1:0] O_psram_ck_n,
     inout  wire [ 1:0] IO_psram_rwds,
@@ -54,10 +54,10 @@ module tang9k_top (
   // ---------------------------------------------------------------- system reset
   // Button S2 (pin 3: the schematic says pin 4, but this board's S1/S2 silkscreen is
   // swapped, and the button labelled S2 is pin 3; see tang9k_soc.cst) resets everything: the PSRAM
-  // controller (it recalibrates), cache, TLB, CPU and peripherals, so the boot ROM starts
-  // over. The button is synchronized to the 27 MHz crystal and debounced (2.4 ms stable).
-  // A power-on reset of ~9.7 ms follows configuration, so the PSRAM IP always starts from
-  // a clean rst_n.
+  // controller (it resets the dies and writes CR0 again; RAM contents are not guaranteed),
+  // cache, TLB, CPU and peripherals, so the boot ROM starts over. The button is synchronized
+  // to the 27 MHz crystal and debounced (2.4 ms stable). A power-on reset of ~9.7 ms follows
+  // configuration.
   reg [ 2:0] btn_s   = 3'b111;
   reg [16:0] btn_cnt = 17'd0;
   reg        btn_down = 1'b0;                   // debounced
@@ -75,60 +75,18 @@ module tang9k_top (
   wire sys_rst_n = por[18] & !btn_down;
 
   // ---------------------------------------------------------------- clocks
-  wire memory_clk, pll_lock;
-
+  wire clk, clk_p, pll_lock;              // the SoC clock; the PSRAM's CK (+90 degrees)
   Gowin_rPLL pll (
-      .clkin (clk_27m),
-      .clkout(memory_clk),
-      .lock  (pll_lock)
-  );
-
-  wire        clk;                       // IP clk_out: the SoC clock
-  wire        calib0, calib1;
-  wire        cmd0, cmd_en0, cmd1, cmd_en1, rd_data_valid0, rd_data_valid1;
-  wire [20:0] addr0, addr1;
-  wire [31:0] wr_data0, wr_data1, rd_data0, rd_data1;
-  wire [ 3:0] data_mask0, data_mask1;
-
-  // PSRAM Memory Interface HS 2CH (psram_hs_2ch v1.0), copied as generated from
-  // tang_nano_9K_ov7670 (Gowin V1.9.9 Beta-4, MEMORY_CLK=135, module name Video_frame_buffer):
-  // the netlist rtl/sim/psram_ui_model.v was matched to (verif/psram), which also passed at
-  // memory_clk 54 and 100 MHz. On the board it calibrates both channels from 54 to 135 MHz
-  // except ~77.6-81 MHz (fpga/probe); memory_clk is 84 MHz (CPU 42 MHz).
-  Video_frame_buffer psram (
-      .clk            (clk_27m),
-      .rst_n          (sys_rst_n),
-      .memory_clk     (memory_clk),
-      .pll_lock       (pll_lock),
-      .O_psram_ck     (O_psram_ck),
-      .O_psram_ck_n   (O_psram_ck_n),
-      .IO_psram_rwds  (IO_psram_rwds),
-      .O_psram_reset_n(O_psram_reset_n),
-      .IO_psram_dq    (IO_psram_dq),
-      .O_psram_cs_n   (O_psram_cs_n),
-      .init_calib0    (calib0),
-      .init_calib1    (calib1),
-      .clk_out        (clk),
-      .cmd0           (cmd0),
-      .cmd1           (cmd1),
-      .cmd_en0        (cmd_en0),
-      .cmd_en1        (cmd_en1),
-      .addr0          (addr0),
-      .addr1          (addr1),
-      .wr_data0       (wr_data0),
-      .wr_data1       (wr_data1),
-      .rd_data0       (rd_data0),
-      .rd_data1       (rd_data1),
-      .rd_data_valid0 (rd_data_valid0),
-      .rd_data_valid1 (rd_data_valid1),
-      .data_mask0     (data_mask0),
-      .data_mask1     (data_mask1)
+      .clkin  (clk_27m),
+      .clkout (clk),
+      .clkoutp(clk_p),
+      .lock   (pll_lock)
   );
 
   // ---------------------------------------------------------------- reset
   // SoC reset: asserted asynchronously while sys_rst_n is low or the PLL is unlocked,
-  // released synchronously to clk. The cache itself waits for init_calib, so the CPU can run
-  // the boot ROM (banner) before the PSRAM is ready.
+  // released synchronously to clk. The PSRAM controller takes no command until it has
+  // initialized the dies (~160 us), so the CPU can run the boot ROM (banner) before then.
   wire      rst_in_n = sys_rst_n & pll_lock;
   reg [3:0] rst_sync;
   always @(posedge clk or negedge rst_in_n)
@@ -165,6 +123,13 @@ module tang9k_top (
 
   // ---------------------------------------------------------------- SoC
   wire poweroff;
+  wire        psram_init, psram_ready, psram_cmd_en, psram_cmd_we, psram_wnext, psram_wlast;
+  wire        psram_rvalid;
+  wire [22:2] psram_adr;
+  wire [ 2:0] psram_wbeat;
+  wire [31:0] psram_wdata, psram_rdata;
+  wire [ 3:0] psram_wmask;
+  wire [ 1:0] psram_rerr;
 
   wire i2c_scl_oe, i2c_sda_oe;
   assign i2c_scl = i2c_scl_oe ? 1'b0 : 1'bz;
@@ -196,22 +161,19 @@ module tang9k_top (
       .o_flash_cs_n    (flash_cs_n),
       .o_flash_mosi    (flash_mosi),
       .i_flash_miso    (flash_miso),
-      .i_calib0        (calib0),
-      .i_calib1        (calib1),
-      .o_cmd0          (cmd0),
-      .o_cmd_en0       (cmd_en0),
-      .o_addr0         (addr0),
-      .o_wr_data0      (wr_data0),
-      .o_data_mask0    (data_mask0),
-      .i_rd_data0      (rd_data0),
-      .i_rd_data_valid0(rd_data_valid0),
-      .o_cmd1          (cmd1),
-      .o_cmd_en1       (cmd_en1),
-      .o_addr1         (addr1),
-      .o_wr_data1      (wr_data1),
-      .o_data_mask1    (data_mask1),
-      .i_rd_data1      (rd_data1),
-      .i_rd_data_valid1(rd_data_valid1),
+      .i_psram_init    (psram_init),
+      .i_psram_ready   (psram_ready),
+      .o_psram_cmd_en  (psram_cmd_en),
+      .o_psram_cmd_we  (psram_cmd_we),
+      .o_psram_adr     (psram_adr),
+      .i_psram_wnext   (psram_wnext),
+      .i_psram_wbeat   (psram_wbeat),
+      .o_psram_wdata   (psram_wdata),
+      .o_psram_wmask   (psram_wmask),
+      .o_psram_wlast   (psram_wlast),
+      .i_psram_rvalid  (psram_rvalid),
+      .i_psram_rdata   (psram_rdata),
+      .i_psram_rerr    (psram_rerr),
       .i_pclk          (pclk),
       .i_prst          (prst),
       .o_tmds0         (tmds0),
@@ -226,6 +188,43 @@ module tang9k_top (
       .o_dbg_tx_byte   (),
       .o_dbg_fetch     (),
       .o_dbg_pc        ()
+  );
+
+  // ---------------------------------------------------------------- PSRAM
+  // Both on-package dies in lockstep as one 16-bit bus (doc/psram_controller.md): CR0 0x8FEE
+  // = latency 3 fixed, 16-byte wrapped bursts per die; die 0's true clock on O_psram_ck[0],
+  // die 1's on O_psram_ck_n[1].
+  hyperram_x16 #(.CLK_HZ(CPU_HZ), .INIT_US(160), .LC(3)) psram (
+      .clk            (clk),
+      .clk_p          (clk_p),
+      .rst            (rst),
+      .i_init         (1'b0),
+      .i_cr0          (16'h8FEE),
+      .i_ck_inv       (2'b10),
+      .o_init_done    (psram_init),
+      .o_ready        (psram_ready),
+      .i_cmd_en       (psram_cmd_en),
+      .i_cmd_we       (psram_cmd_we),
+      .i_addr         (psram_adr),
+      .o_wnext        (psram_wnext),
+      .o_wbeat        (psram_wbeat),
+      .i_wdata        (psram_wdata),
+      .i_wmask        (psram_wmask),
+      .i_wlast        (psram_wlast),
+      .o_rvalid       (psram_rvalid),
+      .o_rdata        (psram_rdata),
+      .o_rerr         (psram_rerr),
+      .o_rlat0        (),
+      .o_rlat1        (),
+      .o_ralign       (),
+      .o_dbg_rw       (),
+      .o_dbg_dq       (),
+      .O_psram_ck     (O_psram_ck),
+      .O_psram_ck_n   (O_psram_ck_n),
+      .IO_psram_rwds  (IO_psram_rwds),
+      .O_psram_reset_n(O_psram_reset_n),
+      .IO_psram_dq    (IO_psram_dq),
+      .O_psram_cs_n   (O_psram_cs_n)
   );
 
   // ---------------------------------------------------------------- HDMI
@@ -258,7 +257,7 @@ module tang9k_top (
     else if (tx_stretch != 20'd0) tx_stretch <= tx_stretch - 20'd1;
   end
 
-  assign led_n = ~{poweroff, rst, tx_stretch != 20'd0, calib0 & calib1, pll_lock, beat[24]};
+  assign led_n = ~{poweroff, rst, tx_stretch != 20'd0, psram_init, pll_lock, beat[24]};
 
 endmodule
 

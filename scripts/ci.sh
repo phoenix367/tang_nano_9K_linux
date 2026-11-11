@@ -5,8 +5,9 @@
 #   scripts/ci.sh cpu     the CPU: directed tests in lockstep with verif/qerv/iss.py,
 #                         riscv-tests on the stage-1 and stage-2 cores (W=4 and W=1),
 #                         per-class cycle costs against perf/serv_cpi's ISS
-#   scripts/ci.sh units   unit benches: cache + arbiter, PSRAM model, UART, I2C, SPI,
-#                         video scan-out under CPU load
+#   scripts/ci.sh units   unit benches: cache + arbiter, the 16-bit PSRAM controller (against
+#                         die models) and its cycle model, UART, I2C, SPI, video scan-out
+#                         under CPU load
 #   scripts/ci.sh soc     the Verilator SoC: boot ROM commands, then the bare-metal
 #                         cache-block test (sw/tests/cbo_test.S) on the stage-2 CPU
 #   scripts/ci.sh all     all three
@@ -41,8 +42,8 @@ cpu() {
 units() {
   step "cache + PSRAM arbiter"
   verif/cache/run.sh
-  step "PSRAM model"
-  verif/psram/run.sh
+  step "16-bit PSRAM controller and its cycle model"
+  verif/psram16/run.sh
   step "UART"
   verif/uart/run.sh
   step "I2C"

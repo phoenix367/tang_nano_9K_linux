@@ -13,7 +13,7 @@ fail=0
 for dma in ${DMAS:-1 0}; do
   iverilog -g2012 -o "$B/tb_cache_dma$dma.vvp" -s tb_cache -P tb_cache.DMA=$dma \
     -P tb_cache.OPS=${OPS:-40000} -P tb_cache.SEED=${SEED:-1} \
-    "$HERE/tb_cache.v" "$REPO/rtl/soc/l1_cache.v" "$REPO/rtl/soc/psram_arb.v" "$REPO/rtl/sim/psram_ui_model.v"
+    "$HERE/tb_cache.v" "$REPO/rtl/soc/l1_cache.v" "$REPO/rtl/soc/psram_arb.v" "$REPO/rtl/sim/hyperram_x16_model.v"
   out=$(vvp -n "$B/tb_cache_dma$dma.vvp" | grep -vE "^VCD|finish called" || true)
   echo "DMA=$dma: $out" | sed '2,$s/^/       /'
   grep -q "^PASS" <<<"$out" || fail=1

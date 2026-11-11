@@ -19,7 +19,7 @@ graph LR
     CPU["QERV CPU<br/>Sparrow-SERV W=4, 42 MHz<br/>RV32IMA + Zicbom, SV32 MMU"]
     CACHE["L1 cache 16 KB<br/>(+ uncached alias)"]
     ARB["PSRAM arbiter"]
-    IP["Gowin PSRAM IP<br/>2 channels"]
+    HR["PSRAM controller<br/>16-bit, both dies in lockstep"]
     VID["video: framebuffer DMA,<br/>text mode, TMDS"]
     PER["UART · CLINT · PLIC · SYSCON<br/>I2C · SPI (microSD) · flash window<br/>boot ROM + SBI shim"]
   end
@@ -29,7 +29,7 @@ graph LR
   HOST["Host PC<br/>USB UART 1 Mbaud"]
   SD[("microSD")]
 
-  CPU --> CACHE --> ARB --> IP --> PSRAM
+  CPU --> CACHE --> ARB --> HR --> PSRAM
   VID --> ARB
   CPU --> PER
   PER --> FLASH
@@ -47,14 +47,15 @@ graph LR
 | [stage2_plan.md](stage2_plan.md) | Stage 2, SV32 Linux in S-mode: the privilege modes, the MMU, the SBI shim, boot-time work |
 | [video_plan.md](video_plan.md) | HDMI: the video controller, the PSRAM arbiter, the boot splash, the text console |
 | [peripherals.md](peripherals.md) | I2C and the microSD card: drivers, hardware CRC, measurements, the open write problem |
-| [psram_controller.md](psram_controller.md) | A self-written 16-bit PSRAM controller to replace the Gowin IP: design, what the board showed (pins, CR0, phase window), the probe, what SoC integration needs |
+| [psram_controller.md](psram_controller.md) | The 16-bit PSRAM controller in the SoC (it replaced the Gowin IP on 2026-11-11): design, bus timing, the arbiter and video DMA around it, verification, what the board showed (pins, CR0, phase window), the probe, cost and throughput |
 
 Elsewhere in the repository:
 - `README.md`: what the project is, how to build, run and flash.
 - `CLAUDE.md`: the detailed working notes, with build commands, hardware gotchas,
   measurements and what the board holds now.
 - `external/sparrow-serv/README.md`: the CPU core's changes against upstream SERV.
-- `verif/psram/NOTES.md`: how the PSRAM model was matched to the IP netlist.
+- `verif/psram/NOTES.md`: how the retired Gowin IP's model was matched to its netlist (kept
+  as a record).
 - `.claude/skills/upload-kernel`, `.claude/skills/upload-bitstream`: how to load and flash
   the board.
 
@@ -65,18 +66,20 @@ Elsewhere in the repository:
 - **CPU:** QERV = Sparrow-SERV `W=4 LINUX=1 SMODE=1` + MDU + AMO unit + SV32 MMU. One hart,
   M/S/U, RV32IMA_Zicsr_Zifencei_Zicbom. About 12 cycles per ALU instruction, 22 per
   load/store.
-- **Clocks:** 27 MHz crystal → memory clock 84 MHz → CPU and SoC 42 MHz (the PSRAM IP's user
-  clock); video 126 MHz → pixel clock 25.2 MHz.
-- **Memory:** 8 MB PSRAM (two 4 MB dies) behind a 16 KB direct-mapped write-back cache with
-  32-byte lines. `0x8000_0000` cached, `0x9000_0000` uncached.
-- **The defining constraints:** 8,640 LUTs (74% used) and 26 block RAMs (24 used); 8 MB of
+- **Clocks:** 27 MHz crystal → rPLL → CPU, SoC and PSRAM controller 42 MHz, plus the PSRAM's
+  CK clock, the same 90° later; video 126 MHz → pixel clock 25.2 MHz.
+- **Memory:** 8 MB PSRAM (two 4 MB dies, run in lockstep as one 16-bit bus by the project's
+  controller) behind a 16 KB direct-mapped write-back cache with 32-byte lines.
+  `0x8000_0000` cached, `0x9000_0000` uncached.
+- **The defining constraints:** 8,640 LUTs (65% used) and 26 block RAMs (24 used); 8 MB of
   RAM (2.1 MB free after boot); a CPU that runs about 2 MIPS.
 - **Boot:** internal flash → boot ROM (splash, 2 s autoboot) → kernel copied from the SPI
-  flash → Linux in S-mode under the ROM's SBI v0.1 shim → `~ #` 24.6 s after the ROM prompt.
+  flash → Linux in S-mode under the ROM's SBI v0.1 shim → `~ #` about 25 s after the ROM
+  prompt.
 - **Peripherals:** UART `0x1000_0000` (PLIC 1), CLINT `0x1100_0000`, SYSCON and the video
   registers `0x1110_0000`, I2C `0x1130_0000` (PLIC 2), SPI/microSD `0x1140_0000`, text
   buffer `0x1180_0000`, PLIC `0x1200_0000`, flash window `0x2000_0000`.
 - **Video:** 640 × 480 at 60 Hz over HDMI: an RGB565 framebuffer (`/dev/fb0`) and an
   80 × 30 hardware text console that mirrors the serial shell.
-- **Timing:** cpu_clk 42.126 MHz against 42 (0.072 ns slack); the worst paths are inside the
-  CPU.
+- **Timing:** cpu_clk 45.2 MHz against 42 (+1.675 ns), placed with a 1.5 ns setup guard
+  band in the SDC; the worst paths are inside the CPU.

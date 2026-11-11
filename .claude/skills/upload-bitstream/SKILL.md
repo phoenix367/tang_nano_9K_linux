@@ -27,12 +27,19 @@ power-up. So write it only on an explicit request. "Flash both" means this skill
   ```
   python3 .claude/skills/upload-bitstream/scripts/timing_summary.py
   ```
-  It prints the bitstream's md5 and date, Fmax against each clock's constraint, TNS, the
+  It prints the bitstream's md5 and date, Fmax against each clock's target, TNS, the
   worst paths and the logic use. It exits 1 if a clock misses. `cpu_clk` must reach 42 MHz
-  with TNS 0. A design that misses can still pass a quick test and then corrupt data at
-  random, so don't load one that misses unless the user knowingly wants to try it. (Hold
-  violations inside the PSRAM IP's `u_psram_init` are a known, harmless exception; see
-  CLAUDE.md.)
+  with no negative slack at 42 MHz. A design that misses can still pass a quick test and
+  then corrupt data at random, so don't load one that misses unless the user knowingly
+  wants to try it.
+  - The SDC keeps a 1.5 ns setup guard band on `cpu_clk` (`set_clock_uncertainty`), and
+    Gowin's slack and Fmax include it. A good build shows TNS 0 with the band. One that
+    eats into the band but still meets 42 MHz passes, with a note on the clock line: the
+    script adds each path's uncertainty back. Prefer a rebuild with another `SDC_UNCERT`
+    for something that goes into flash.
+  - Hold violations inside the Gowin PSRAM IP's `u_psram_init` were a known, harmless
+    exception while the SoC used the IP (until 2026-11-11). The SoC's own controller has
+    none, so any hold violation now is real.
 - Copy the build to a named file and load the copy:
   ```
   cp fpga/impl/pnr/tang9k_soc.fs /mnt/data/build/tang9k_linux/tang9k_soc_<tag>.fs

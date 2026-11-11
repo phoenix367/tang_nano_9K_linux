@@ -9,8 +9,9 @@ soft core into the FPGA with the on-package PSRAM as main memory. The core is QE
 W=4) extended for no-MMU M-mode Linux. M0–M3 are done, and in M4 Linux boots to a shell on
 the board. Stage 2 (SV32 MMU, S-mode kernel under a ROM SBI shim) also boots to a shell on
 the board, with real fork and pipelines; `doc/stage2_plan.md` has the plan and status. The
-board autoboots the MMU kernel from its flashes: `~ #` 17 s after the boot ROM prompt at
-42 MHz (12 s after a UART-loaded `B`). The stage-1 milestones (M0 software image in the emulator →
+board autoboots the MMU kernel from its flashes: `~ #` about 25 s after the boot ROM prompt
+at 42 MHz (19 s after a UART-loaded `B`). The PSRAM is driven by the project's own 16-bit
+controller (`doc/psram_controller.md`), which replaced Gowin's PSRAM IP. The stage-1 milestones (M0 software image in the emulator →
 M1 core → M2 SoC sim → M3 fit → M4 board), memory map and open decisions are in
 `doc/stage1_plan.md`. `doc/01-architecture.md` describes the hardware as a whole
 (clocks, reset, memory, address map, timing, resources); keep it in step with changes. HDMI video works on the board too: a 640×480 RGB565 framebuffer in
@@ -31,11 +32,26 @@ if it exists.
   `tang9k_cfg.v` with `TANG9K_CPU_HZ` and the hex path; `fpga/build.sh prep` does only this)
   and builds `fpga/tang9k_soc.gprj`, top `fpga/src/tang9k_top.v`. The bitstream is
   `fpga/impl/pnr/tang9k_soc.fs`.
-  - **Clocks:** the rPLL makes memory_clk = 84 MHz; the SoC runs on the IP's clk_out
-    (42 MHz; it was 72/36 MHz). The stage-2 build meets 42 MHz with almost no slack (Fmax
-    42.004 MHz at the worst-case corner; the worst paths are the reset fan-out). The rPLL wrapper `fpga/src/gowin_rpll/gowin_rpll.v` is written by hand (the
-    user's call: no regeneration needed). If its frequency changes, change the SDC's
-    multiply/divide and `CPU_HZ` too.
+  - **Clocks:** the rPLL makes the SoC clock, 42 MHz (`CLKOUT`, net `clk`, SDC `cpu_clk`),
+    and the PSRAM's CK clock, the same 90° later (`CLKOUTP`, `clk_p`, `ck_clk`). The rPLL
+    wrapper `fpga/src/gowin_rpll/gowin_rpll.v` is written by hand (the user's call: no
+    regeneration needed). If its frequency changes, change the SDC's multiply/divide and
+    `CPU_HZ` too.
+  - **Timing:** `fpga/src/tang9k_soc.sdc` keeps a 1.5 ns setup guard band on cpu_clk's paths
+    (`set_clock_uncertainty`, the user's idea; `SDC_UNCERT=<ns> fpga/build.sh` tries another
+    value). Gowin's slack and Fmax include it (`tUnc` on each path), so TNS 0 means 42 MHz
+    with 1.5 ns to spare; real Fmax = 1 / (1 / Fmax − 1.5 ns).
+    - Gowin's PnR is deterministic, and the constraints alone move the result (2026-11-11,
+      real Fmax): no band 39.3 MHz; 1.5 / 2.0 / 2.5 / 3.0 ns → 45.18 / 42.02 / 44.58 / 42.23.
+      Over-constraining the clock instead (×15/16/17 → 45/48/51 MHz) gave 42.58 / 45.0 /
+      41.96, but it also inflated the power estimate. Retry other values when a change costs
+      timing.
+    - `timing_summary.py` (upload-bitstream skill) adds each listed path's uncertainty back,
+      so a build that eats into its band but meets 42 MHz passes with a note. The SDC's
+      `report_timing` lists 200 setup paths.
+    - The current build (`tang9k_soc_unc.fs`): TNS 0 with the band, +1.675 ns without it
+      (45.18 MHz), no hold violations. The worst paths are the RF read port / SERV's buffer
+      registers → RF write data and AMO write data.
   - **Video (`VIDEO=1 fpga/build.sh`, doc/video_plan.md):**
     - A second hand-written rPLL (`gowin_rpll_video.v`) makes 126 MHz, and a `CLKDIV` "5"
       the 25.2 MHz pixel clock.
@@ -44,54 +60,58 @@ if it exists.
     - build.sh writes `TANG9K_VIDEO` into `tang9k_cfg.v`, and one SDC,
       `fpga/build/tang9k_soc.sdc`: `fpga/src/tang9k_soc.sdc` plus the video clocks. Gowin
       reads each SDC file on its own, so a second SDC can't refer to the first one's clocks.
-    - Stage 2 + video + text mode + I2C + SD: 74% logic (89% of CLS), BSRAM 24/26, TNS 0.
-      - Fmax swings with placement: 45.7 MHz in one build, 42.25 MHz after the +7-LUT
-        SD CRC, 42.126 MHz with Zicbom (`tang9k_soc_cbo.fs`).
+    - Stage 2 + video + text mode + I2C + SD: 65% logic (5,584; 86% of CLS), BSRAM 24/26
+      (`tang9k_soc_unc.fs`). With the Gowin PSRAM IP it was 74% (6,352).
+      - With the IP, Fmax swung with placement: 45.7 MHz in one build, 42.25 MHz after the
+        +7-LUT SD CRC, 42.126 MHz with Zicbom (`tang9k_soc_cbo.fs`).
       - Zicbom's first build made 42.085 MHz: the CMO decode reached the cache's state
         logic. Latching the CMO in the cache (`cmo_q`) and decoding only imm[2:0] took that
-        path out. The worst paths are now SERV's funct3 → CSR/RF write data.
+        path out.
       - Without the AMO unit's registered SC compare it was 38.4–39.9 MHz
         (`doc/peripherals.md`).
-    - `SDC_MEM_MULT` (default 28) over-constrains the SDC only, for experiments. 29/30 made
-      placement worse.
     - The font ROM is `rtl/video/font8x16.hex` (the kernel's CP437 `font_8x16`); build.sh
       writes its path as `TANG9K_FONT_FILE`.
     - `fpga/probe_hdmi/run.sh` is a CPU-less colour-bar probe (~10 s build).
-  - **Avoid memory_clk ~77.6–81 MHz:** with this IP netlist, PSRAM channel 1 (and at 81 MHz
-    both) never calibrates there, and the CPU hangs on its first PSRAM access. 54–77.1 and
-    84–135 MHz calibrate. `fpga/probe/run.sh TAG IDIV FBDIV ODIV` builds a CPU-less probe
-    (rPLL + IP + a 27 MHz beacon UART printing lock/calib) in ~15 s and loads it.
+  - **PSRAM controller:** `rtl/psram/hyperram_x16.v` (doc/psram_controller.md), in the SoC
+    since 2026-11-11. It runs both dies in lockstep as one 16-bit DDR bus, with CK at the
+    SoC clock (1:1, from the rPLL's `CLKOUTP` 90° later) and no calibration.
+    - A 32-byte line is one 8-beat burst of 18 cycles; read beat k comes 16 + k cycles after
+      the command. A word write ends after its beat (11 cycles). CR0 = `0x8FEE` (latency 3
+      fixed, 16-byte wrap per die, so a burst wraps inside the line).
+    - Read words are found from RWDS into per-die FIFOs. A word missing at the end of the
+      capture window comes out as a filler with `o_rerr` (SYSCON word 2 counts them).
+    - Facts the board settled (CPU-less probe `fpga/probe_psram16/run.sh`, full 8 MB):
+      - CR0 is written at `CA[24]`; a write at `CA[16]` is ignored.
+      - Die 0's true clock is `O_psram_ck[0]`, on two single-ended pins (IOL8A/IOL7A, not a
+        differential pair: an `ELVDS_OBUF` there moved them to pins 85/86). Die 1's is
+        `O_psram_ck_n[1]`, on the IOL23A/B pair.
+      - Every CK phase from 22.5 to 157.5 degrees passes; 0 fails.
+    - Tests: `verif/psram16/run.sh` (~20 s, in CI). `rtl/sim/gowin_io_sim.v` models the
+      ODDR/IDDR/ELVDS_OBUF cells, so no Gowin install is needed (`PRIM=gowin` uses Gowin's).
+  - **Gowin PSRAM IP (retired 2026-11-11):** `fpga/src/psram_memory_interface_hs_2ch/` is the
+    ov7670 project's generated netlist (135 MHz settings, module `Video_frame_buffer`), kept
+    for the calibration probe `fpga/probe/`. IP generation in this machine's IDE fails on the
+    license. With it the SoC ran on the IP's clk_out = memory_clk / 2 (84 → 42 MHz).
+    - It never calibrated at memory_clk ~77.6–81 MHz (channel 1; at 81 MHz both). 54–77.1
+      and 84–135 MHz calibrate. `fpga/probe/run.sh TAG IDIV FBDIV ODIV` builds a CPU-less
+      probe (rPLL + IP + a 27 MHz beacon UART printing lock/calib) in ~15 s and loads it.
     - Likely cause: the netlist was generated for another clock. Its `.ipc` says
-      `MEMORY_CLK=135`, `SHIFT_DELAY=152`, and we run it at 84 MHz.
-    - The generator picks `SHIFT_DELAY` per clock: 0 at 60 MHz, 192 at 160 MHz in other
-      projects' configs.
-    - An element14 article (shabaz, 2026-10) generated the IP for 81 MHz and passed a
-      full-memory test of both channels at 81 MHz (one board, second-hand).
-    - So a netlist generated for our clock may well calibrate anywhere; that needs a
-      Gowin install whose IP generation works.
-  - **Replacement candidate:** `rtl/psram/hyperram_x16.v` (doc/psram_controller.md). It runs
-    both dies in lockstep as one 16-bit bus at CK = 42 MHz, without calibration. The CPU-less
-    probe `fpga/probe_psram16/run.sh` passes a full 8 MB test on both dies at every CK phase
-    from 22.5 to 157.5 degrees. Not in the SoC yet. Facts the board settled:
-    - CR0 is written at `CA[24]`; a write at `CA[16]` is ignored.
-    - Die 0's true clock is `O_psram_ck[0]`, on two single-ended pins (IOL8A/IOL7A, not a
-      differential pair). Die 1's is `O_psram_ck_n[1]`, on the IOL23A/B pair.
-    - Simulation: `verif/psram16/run.sh` (it needs Gowin's `prim_sim.v`).
-  - **PSRAM IP:** `fpga/src/psram_memory_interface_hs_2ch/` is the ov7670 project's
-    generated netlist, copied unchanged (135 MHz settings, module `Video_frame_buffer`).
-    IP generation in this machine's IDE fails on the license.
+      `MEMORY_CLK=135`, `SHIFT_DELAY=152`; the generator picks `SHIFT_DELAY` per clock. An
+      element14 article (shabaz, 2026-10) generated the IP for 81 MHz and passed a
+      full-memory test of both channels there.
   - **Board top:** UART 1 Mbaud (`BAUD` env of `fpga/build.sh`; the divider is fixed in
     hardware). The button labelled S2 is the system reset. That is pin 3 on our board: the
     Sipeed schematic names pin 4 S2, but this board's S1/S2 silkscreen is swapped (checked by
     pressing). It is synchronized and debounced (2.4 ms) in the
-    27 MHz domain, with a ~10 ms power-on reset. It resets the PSRAM IP (which recalibrates;
-    RAM contents are not kept), the cache's FSM, the TLB, the CPU and peripherals, so the
-    boot ROM starts over. The cache's tag RAM is not reset (only the bitstream initializes
-    it), so lines cached before a reset stay valid. LEDs: heartbeat, PLL lock, PSRAM
-    calibrated, UART TX, reset, poweroff.
-  - **SYSCON status words** (read at 0x1110_0000 + 4·i, layout in `soc_top.v`): calib bits,
-    PSRAM commands and read beats per channel, cache misses and write-backs. Words 8–13 are
-    the video registers CTRL/BASE/STATUS/YOFF/TSTART/CURSOR (writable; `video_ctrl.v`).
+    27 MHz domain, with a ~10 ms power-on reset. It resets the PSRAM controller (RESET# and
+    the CR0 write again, ~0.2 ms; RAM contents are not guaranteed), the cache's FSM, the
+    TLB, the CPU and peripherals, so the boot ROM starts over. The cache's tag RAM is not
+    reset (only the bitstream initializes it), so lines cached before a reset stay valid.
+    LEDs: heartbeat, PLL lock, PSRAM ready, UART TX, reset, poweroff.
+  - **SYSCON status words** (read at 0x1110_0000 + 4·i, layout in `soc_top.v`): 0 PSRAM
+    ready (3), 1 PSRAM commands, 2 read beats with a filler word (should stay 0), 3 read
+    beats, 4 zero, 5 cache misses, 6 write-backs. Words 8–13 are the video registers
+    CTRL/BASE/STATUS/YOFF/TSTART/CURSOR (writable; `video_ctrl.v`).
     - Poweroff (0x5555) and reboot (0x7777) act only on writes to offset 0. Before the
       fix, any SYSCON write of those values counted.
   - **Flash pins (59–62) are MSPI dual-purpose pins:** the build passes
@@ -130,7 +150,7 @@ if it exists.
     libc they were built with, so host and container trees must not mix. The container's
     kernel images land in `docker/images-tang9k-mmu/`, not the host's.
   - Checked in the container: `scripts/ci.sh all` passes, `fpga/build.sh` builds the
-    same 42.126 MHz bitstream (gw_sh reaches the licence server through the default
+    same 42.126 MHz bitstream (then with the Gowin PSRAM IP; gw_sh reaches the licence server through the default
     network), `CONFIG=mmu sw/build.sh` builds from scratch.
   - `scripts/gw_run.sh` preloads `libfreetype.so.6`, not `libfreetype.so`. The unversioned
     name exists only with `libfreetype-dev`, and without the preload `gw_sh` dies on
@@ -176,19 +196,23 @@ if it exists.
     with a CRC check. `qerv_boot.py --reconfig` reloads it (openFPGALoader -r), as at
     power-on.
   - **What the board holds now:**
-    - Both were last written on 2026-11-11, with the system as of Zicbom (text console, I2C,
-      SD, PLIC, cache-block operations).
-    - Internal flash: `/mnt/data/build/tang9k_linux/tang9k_soc_cbo.fs` (SMODE=1 VIDEO=1,
-      splash boot ROM, reset on pin 3).
-    - SPI flash: `/mnt/data/build/tang9k_linux/flash_mmu_cbo.bin` (3,433,076 B: Image
-      3,395,228, DTB 2,871, S-mode flag, splash 29,300). Earlier images:
-      `flash_mmu_irq.bin` (with `tang9k_soc_irq.fs`) and `flash_mmu_pre_video.bin`.
-    - Flash a kernel and a bitstream together: a kernel's DT expects the devices of its own
-      bitstream (text buffer, I2C, SPI).
+    - Internal flash (written 2026-11-11, after the SPI flash):
+      `/mnt/data/build/tang9k_linux/tang9k_soc_unc.fs` (md5 ea952537…; SMODE=1 VIDEO=1, the
+      16-bit PSRAM controller, the SDC's 1.5 ns guard band, splash boot ROM, reset on pin 3).
+      Earlier the same day: `tang9k_soc_hr16.fs` (the same RTL, placed against an
+      over-constrained 48 MHz) and before it `tang9k_soc_cbo.fs` (the same system with the
+      Gowin PSRAM IP), which stays as the fallback.
+    - SPI flash (written 2026-11-11, with the system as of Zicbom: text console, I2C, SD,
+      PLIC, cache-block operations): `/mnt/data/build/tang9k_linux/flash_mmu_cbo.bin`
+      (3,433,076 B: Image 3,395,228, DTB 2,871, S-mode flag, splash 29,300). It runs on both
+      `tang9k_soc_cbo.fs` and `tang9k_soc_unc.fs`: the PSRAM change added no device. Earlier
+      images: `flash_mmu_irq.bin` (with `tang9k_soc_irq.fs`) and `flash_mmu_pre_video.bin`.
+    - Flash a kernel and a bitstream together when the devices change: a kernel's DT expects
+      the devices of its own bitstream (text buffer, I2C, SPI).
     - At power-up the splash is on screen from the boot ROM on. Linux autoboots, and when its
-      shell starts the screen switches to the text console: `Run /init` 19.8 s and `~ #`
-      24.6 s after the ROM's prompt (the irq system: 16.0 / 19.3 s; I2C + SD init and the
-      larger Image account for it).
+      shell starts the screen switches to the text console: `Run /init` 19.9 s and `~ #`
+      24.8 s after the ROM's prompt (with the IP: 19.8 / 24.6 s; the irq system: 16.0 /
+      19.3 s, before I2C + SD init and the larger Image).
   - **Checking the flash:** `qerv_boot.py --hash-flash flash.bin` has the boot ROM hash the
     flash window (2.7 MB in ~18 s). `--flash-boot` boots it, and `--autoboot` loads the
     bitstream and sends nothing (the power-up path).
@@ -239,9 +263,10 @@ if it exists.
   - **Read data:** each slave's registered ack selects its registered read data (AND-OR). The
     address decode stays out of the read path, which is the SoC's critical one.
   - `l1_cache.v`: 16 KB unified, direct-mapped, write-back. It asks `psram_arb.v` for each
-    PSRAM command. The arbiter is the IP's register stage and shares the IP with the video
-    DMA: CPU first, the DMA first only when its line deadline is near. The cache also serves
-    the uncached alias: posted single-beat writes and beat-0 reads.
+    PSRAM command. The arbiter registers the command for the controller (`hyperram_x16`, one
+    command at a time) and shares it with the video DMA: CPU first, the DMA first only when
+    its line deadline is near. The cache also serves the uncached alias: posted single-beat
+    writes and beat-0 reads.
     - **Cache-block operations (Zicbom):** the CPU's `cbo.clean`/`cbo.flush`/`cbo.inval`
       reach the cache as a request with `i_cmo`/`i_cmo_op`. clean and flush write a dirty
       line back (the eviction burst); clean keeps the line, flush drops it. inval drops it
@@ -249,8 +274,13 @@ if it exists.
       after the write burst is granted, so a later DMA read sees the data.
     - In soc_top the flag skips the arbiter (`m_cmo = dbus_cmo & !ibus_cyc`). A CMO to an
       I/O address is acked there and never reaches a slave.
-  - **One write stream:** both channels' wr_data/data_mask carry the same stream. A write
-    enables bytes only in its granted cycle, and writes are kept 8 cycles apart.
+  - **Write beats:** the cache sends beat k k cycles after the grant into the arbiter's
+    8-entry buffer, and the controller takes them from cycle 9 on. The cache masks every
+    byte outside a write's own beats: the arbiter's `o_wlast` ends the burst after the last
+    enabled beat, so an uncached word write takes 11 cycles instead of 18.
+  - **Bandwidth:** one line per 18 cycles, 74.7 MB/s, shared by the CPU and scan-out (36.9
+    MB/s; 720 of every 1,333 cycles during a line). `video_dma.v` paces itself with
+    `TBURST` = 18 and asks for priority with a `MARGIN` of 66 cycles.
   - `video_ctrl.v` (`VIDEO=1`): registers, `video_dma.v`, a 2-line buffer and `video_out.v`
     on the pixel clock.
     - **Text mode** (CTRL bit 2): an 80×30 text buffer at `0x1180_0000` (write-only,
@@ -277,7 +307,8 @@ if it exists.
       `mmc_spi`.
   - `bootrom.v`, holding `sw/bootrom/bootrom.S`
 
-  It is one clock domain, the PSRAM IP's user clock, plus the pixel clock with video.
+  It is one clock domain, the rPLL's 42 MHz (the PSRAM controller's too), plus the pixel
+  clock with video.
   - **Boot ROM:** copies Image + DTB from flash (layout from `sw/mkflash.py`: header `QRVL`,
     DTB @0x1000, Image @0x2000) to `0x80000000` / `0x807FF000`, or uses preloaded RAM. It then
     enters the kernel with a0=0, a1=DTB.
@@ -294,29 +325,19 @@ if it exists.
     - `VIDEO=1` builds the video controller and runs at the board's 42 MHz (`+clk_hz`) with
       the 25.2 MHz pixel clock between the CPU clock's edges.
     - `FRAME_DUMP=1` writes every 60th frame to `$WORK/frames-<tag>/` as PPM.
-  - **PSRAM model:** `rtl/sim/psram_ui_model.v` was matched edge-for-edge to the real IP
-    gate-level netlist (`verif/psram/run.sh`, `--ip` for the ~15 min netlist run; details in
-    `verif/psram/NOTES.md`):
-    - **Timing:** read latency is 16 clk_out (hardware may see 15–17 depending on calibration,
-      so always use rd_data_valid). Write beat 0 comes with cmd_en.
-    - **Mask:** data_mask=1 means the byte is not written.
-    - **Spacing:** TCMD is 19. 18 still works; ≤17 silently corrupts data, with no IP error.
-    - **Bursts** wrap inside their 32-byte group.
-    - **Loader:** `+psram_load0/1 +psram_addr0/1` take byte addresses.
-  - **PSRAM IP on hardware (for M3):**
-    - Its `clk` input must be the free-running 27 MHz reference, and `pll_lock` must be high.
-    - init_calib rises ~15.6 ms after reset.
-    - memory_clk = 2 × clk_out is fixed; the GUI accepts 50–250 MHz.
-    - memory_clk is 84 MHz (CPU 42 MHz). The earlier reasoning that the IP's fixed ~3.2 ns
-      CK shift favours ~78 MHz was wrong on hardware: 78 MHz sits in the calibration band.
-    - Headless gw_sh can't generate this IP. In the 1.9.12 IDE it is under "Deprecated"
-      ("PSRAM Memory Interface HS 2CH"). The non-deprecated "PSRAM Memory Interface HS" has
-      a 1-channel ×16 mode (one 64-bit port) and a 2-channel mode with extra `cmd_rdy0/1` and
-      different clocking; neither has been checked against the model.
-    - The 135 MHz netlist also passed the IP-vs-model compare at memory_clk 54 and 100 MHz in
-      simulation. At read delays of 9.2/12.9 ns the read latency shifts (model mismatch),
-      which the rd_data_valid-driven cache tolerates.
-  - **RTL boot results (2026-11-10, 27 MHz):**
+  - **PSRAM model:** `rtl/sim/hyperram_x16_model.v`, the controller's command interface as
+    a cycle model with 8 MB behind it. `verif/psram16/run.sh` checks that it takes exactly
+    as many cycles as the controller with two die models.
+    - **Timing:** read beat k comes 16 + k cycles after the command is taken (always use
+      rvalid); `o_ready` again at +18. Write beat k is asked for at +7 + k (`o_wnext`), and a
+      write ending after beat k frees the controller at +11 + k.
+    - **Mask:** wmask=1 means the byte is not written.
+    - **Bursts** wrap inside their 32-byte line from the addressed word.
+    - **Loader:** `+psram_load0/1 +psram_addr0/1` take byte addresses. Its checker counts
+      commands issued while not ready (`error_count`).
+    - The Gowin IP's model `rtl/sim/psram_ui_model.v` (matched edge for edge to the IP
+      netlist, `verif/psram/`, `verif/psram/NOTES.md`) is kept as a record; nothing uses it.
+  - **RTL boot results (2026-11-10, 27 MHz, with the IP's model):**
     - `~ #` after 1.88G cycles = 69.5 s (80.3M instructions, CPI 23.4); flash copy +4.7 s.
     - About 4.5× more timer ticks than the emulator model, so tick/sched/timekeeping work is
       ~14% of instructions.
@@ -333,7 +354,10 @@ if it exists.
       reference model. PHY=1 decodes the `OSER10` model's output; PHY=0 is the full 640×480
       timing (~7 min). `PHYS=1` runs one.
     - `verif/video/run_sys.sh` (~3 min): cache + arbiter + video controller at 42/25.2 MHz
-      under worst-case CPU traffic, every pixel checked.
+      under worst-case CPU traffic, every pixel checked. With the 16-bit controller the
+      tightest line had 17 cycles of deadline slack.
+    - `verif/psram16/run.sh` (~20 s): the PSRAM controller against die models, its cycle
+      model, and the probe's memory test (see "PSRAM controller" above).
     - `verif/spi_flash/tb_spi_flash.v` covers the flash reader.
   - **I2C and SPI tests:** `verif/i2c/run.sh` (the core against
     `rtl/sim/i2c_eeprom_model.v`, which `tb_soc.v` also puts on the SoC sim's I2C bus at
@@ -630,10 +654,10 @@ fixed under `LINUX=1`.
 - Clock: 27 MHz crystal on pin 52. Button/reset on pin 4. LEDs on pins 10, 11, 13, 14, 15, 16
   (active-low, 1.8 V bank). Console UART: TX 17 / RX 18 (3.3 V), reachable through the
   on-board USB-JTAG/UART bridge.
-- PSRAM is reached only through Gowin's `psram_memory_interface_hs_2ch` IP. Its pins come from
-  the IP, not from the user `.cst`. The 2-channel variant exposes the two dies as separate
-  4 MB channels. Linux wants one contiguous region, so either regenerate the IP in a
-  single-channel mode or address-decode the two channels behind one bus slave. PSRAM latency is
+- The PSRAM dies sit on internal pads, placed by port name (`O_psram_ck`, `IO_psram_dq`,
+  ...), not by `IO_LOC` in the user `.cst`. Each die has an 8-bit bus; our controller
+  (`rtl/psram/hyperram_x16.v`) runs both in lockstep as one 16-bit bus, so Linux sees one
+  contiguous 8 MB. Gowin's IP instead exposed them as two 4 MB channels. PSRAM latency is
   high, so the CPU needs a cache in BSRAM.
 
 ## Prior art for Linux at this memory size (checked 2026-11)

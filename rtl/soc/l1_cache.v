@@ -26,10 +26,10 @@
 // Used for the video framebuffer, which the display DMA reads straight from PSRAM: software
 // must not reach the same memory through the cached window as well.
 //
-// PSRAM side (psram_arb, rtl/sim/psram_ui_model.v): o_req asks for a command, granted by
-// i_gnt in the same cycle; write beat k is o_wdata/o_wmask k cycles after the grant (mask
-// bit = 1: byte not written); a read's 8 beats come back on i_rvalid/i_rdata. Byte address
-// bit 22 selects the channel; the arbiter keeps the command spacing (TCMD).
+// PSRAM side (psram_arb, then rtl/psram/hyperram_x16.v; rtl/sim/hyperram_x16_model.v in
+// simulation): o_req asks for a command, granted by i_gnt in the same cycle; write beat k is
+// o_wdata/o_wmask k cycles after the grant (mask bit = 1: byte not written); a read's 8 beats
+// come back on i_rvalid/i_rdata. The arbiter waits for the controller between commands.
 `default_nettype none
 
 module l1_cache #(
@@ -148,8 +148,9 @@ module l1_cache #(
     o_req     = 1'b0;
     o_req_we  = 1'b0;
     o_req_adr = {victim_tag, idx, 3'd0};
-    // no byte written outside a write's own beats: both channels see this one stream, and
-    // a write waiting for its grant must not touch the tail of the one before it
+    // no byte enabled outside a write's own beats: the arbiter stores 8 beats from every
+    // write grant and ends the burst after the last enabled one (an uncached word write
+    // enables beat 0 only)
     o_wmask   = 4'b1111;
 
     case (state)

@@ -1,10 +1,11 @@
 // System test of the video scanout path (doc/video_plan.md): l1_cache + psram_arb +
-// video_ctrl (video_dma, line buffer, video_out) + the PSRAM IP model, CPU clock 42 MHz and
+// video_ctrl (video_dma, line buffer, video_out) + the PSRAM controller's cycle model
+// (rtl/sim/hyperram_x16_model.v: one 16-bit bus shared by the cache and the DMA), CPU clock 42 MHz and
 // pixel clock 25.2 MHz, the real 640x480@60 timing.
-//   - The framebuffer at 0x8070_0000 (channel 1) is filled through the model's backdoor;
+//   - The framebuffer at 0x8070_0000 is filled through the model's backdoor;
 //     the video is enabled through the CTRL register.
 //   - Meanwhile a CPU-side master hammers the cache (8 lines) with random reads and writes in
-//     channel 1 (constant misses and write-backs, the worst case for the DMA), checking its
+//     the PSRAM (constant misses and write-backs, the worst case for the DMA), checking its
 //     own data.
 //   - Every displayed pixel of frames 2..FRAMES-1 must equal the framebuffer; the underflow
 //     flag must stay clear. The DMA's tightest deadline slack is reported.
@@ -30,10 +31,12 @@ module tb_video_sys;
   wire [31:0] rdt;
   wire        ack;
 
-  wire        calib0, calib1, cmd0, cmd_en0, cmd1, cmd_en1, rdv0, rdv1;
-  wire [20:0] addr0, addr1;
-  wire [31:0] wd0, wd1, rd0, rd1, hits, misses, wbs;
-  wire [ 3:0] dm0, dm1;
+  wire        p_init, p_ready, p_cmd_en, p_cmd_we, p_wnext, p_wlast, p_rvalid;
+  wire [22:2] p_adr;
+  wire [ 2:0] p_wbeat;
+  wire [31:0] p_wdata, p_rdata, hits, misses, wbs;
+  wire [ 3:0] p_wmask;
+  wire [ 1:0] p_rerr;
   wire        c_req, c_we, c_gnt, c_rvalid, d_req, d_urgent, d_gnt, d_rvalid;
   wire [22:2] c_adr, d_adr;
   wire [31:0] c_wdata, c_rdata, d_rdata;
@@ -47,22 +50,20 @@ module tb_video_sys;
       .o_hits(hits), .o_misses(misses), .o_writebacks(wbs));
 
   psram_arb arb (
-      .i_clk(sclk), .i_rst(rst), .i_calib(calib0 & calib1),
+      .i_clk(sclk), .i_rst(rst),
       .i_c_req(c_req), .i_c_we(c_we), .i_c_adr(c_adr), .o_c_gnt(c_gnt),
       .i_c_wdata(c_wdata), .i_c_wmask(c_wmask), .o_c_rvalid(c_rvalid), .o_c_rdata(c_rdata),
       .i_d_req(d_req), .i_d_urgent(d_urgent), .i_d_adr(d_adr), .o_d_gnt(d_gnt),
       .o_d_rvalid(d_rvalid), .o_d_rdata(d_rdata),
-      .o_cmd0(cmd0), .o_cmd_en0(cmd_en0), .o_addr0(addr0), .o_wr_data0(wd0), .o_data_mask0(dm0),
-      .i_rd_data0(rd0), .i_rd_data_valid0(rdv0),
-      .o_cmd1(cmd1), .o_cmd_en1(cmd_en1), .o_addr1(addr1), .o_wr_data1(wd1), .o_data_mask1(dm1),
-      .i_rd_data1(rd1), .i_rd_data_valid1(rdv1));
+      .i_ready(p_ready), .o_cmd_en(p_cmd_en), .o_cmd_we(p_cmd_we), .o_cmd_adr(p_adr),
+      .i_wnext(p_wnext), .i_wbeat(p_wbeat), .o_wdata(p_wdata), .o_wmask(p_wmask),
+      .o_wlast(p_wlast), .i_rvalid(p_rvalid), .i_rdata(p_rdata));
 
-  psram_ui_model #(.CALIB_CYCLES(100)) psram (
-      .clk(sclk), .rst_n(!rst),
-      .cmd0(cmd0), .cmd_en0(cmd_en0), .addr0(addr0), .wr_data0(wd0), .data_mask0(dm0),
-      .rd_data0(rd0), .rd_data_valid0(rdv0), .init_calib0(calib0),
-      .cmd1(cmd1), .cmd_en1(cmd_en1), .addr1(addr1), .wr_data1(wd1), .data_mask1(dm1),
-      .rd_data1(rd1), .rd_data_valid1(rdv1), .init_calib1(calib1));
+  hyperram_x16_model #(.INIT_CYCLES(100)) psram (
+      .clk(sclk), .rst(rst), .o_init_done(p_init), .o_ready(p_ready),
+      .i_cmd_en(p_cmd_en), .i_cmd_we(p_cmd_we), .i_addr(p_adr), .o_wnext(p_wnext),
+      .o_wbeat(p_wbeat), .i_wdata(p_wdata), .i_wmask(p_wmask), .i_wlast(p_wlast),
+      .o_rvalid(p_rvalid), .o_rdata(p_rdata), .o_rerr(p_rerr));
 
   reg  [ 2:0] r_adr = 0;
   reg  [31:0] r_dat = 0;
@@ -123,7 +124,7 @@ module tb_video_sys;
     end
 
   // ---------------------------------------------------------------- CPU traffic
-  reg [7:0] ref_mem[0:16383];               // 4 regions x 4 KB in channel 1, outside the fb
+  reg [7:0] ref_mem[0:16383];               // 4 regions x 4 KB above 4 MB, outside the fb
   integer   seed, n = 0, cpu_err = 0, i;
   reg [ 1:0] r;
   reg [11:0] off;

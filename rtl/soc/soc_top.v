@@ -1,12 +1,13 @@
 // QERV SoC (stage 1, doc/stage1_plan.md): QERV-Linux CPU, unified L1 cache in front of the
-// Gowin PSRAM HS 2ch IP (8 MB), boot ROM, 16550 UART, CLINT, SYSCON. One clock domain: the
-// PSRAM IP's user clock (clk_out).
+// 8 MB PSRAM (through psram_arb and the 16-bit controller rtl/psram/hyperram_x16.v, which the
+// board top instantiates), boot ROM, 16550 UART, CLINT, SYSCON. One clock domain, the
+// controller's (42 MHz on the board).
 //
 // Memory map (same as the mini-rv32ima emulator so one kernel + DTB runs in both):
 //   0x0000_0000  boot ROM (reset vector)        0x1100_0000  CLINT
 //   0x1000_0000  UART (16550, byte registers)   0x1110_0000  SYSCON (poweroff/reboot)
 //   0x2000_0000  SPI flash, 16 MB window, read-only (boot ROM copies the kernel from it)
-//   0x8000_0000  PSRAM, 8 MB, cached (bit 22 selects the IP channel)
+//   0x8000_0000  PSRAM, 8 MB, cached
 //   0x9000_0000  the same PSRAM, uncached (the video framebuffer; doc/video_plan.md)
 //   0x1200_0000  PLIC (4 MB window): source 1 = the UART, one context = the hart's SEIP
 //   0x1180_0000  video text buffer (VIDEO=1; 80 x 30 cells, write-only)
@@ -50,23 +51,21 @@ module soc_top #(
     output wire        o_flash_cs_n,
     output wire        o_flash_mosi,
     input  wire        i_flash_miso,
-    // PSRAM IP user interface
-    input  wire        i_calib0,
-    input  wire        i_calib1,
-    output wire        o_cmd0,
-    output wire        o_cmd_en0,
-    output wire [20:0] o_addr0,
-    output wire [31:0] o_wr_data0,
-    output wire [ 3:0] o_data_mask0,
-    input  wire [31:0] i_rd_data0,
-    input  wire        i_rd_data_valid0,
-    output wire        o_cmd1,
-    output wire        o_cmd_en1,
-    output wire [20:0] o_addr1,
-    output wire [31:0] o_wr_data1,
-    output wire [ 3:0] o_data_mask1,
-    input  wire [31:0] i_rd_data1,
-    input  wire        i_rd_data_valid1,
+    // PSRAM controller's command interface (rtl/psram/hyperram_x16.v; in simulation
+    // rtl/sim/hyperram_x16_model.v)
+    input  wire        i_psram_init,     // initialized (RESET#, CR0 written)
+    input  wire        i_psram_ready,
+    output wire        o_psram_cmd_en,
+    output wire        o_psram_cmd_we,
+    output wire [22:2] o_psram_adr,
+    input  wire        i_psram_wnext,
+    input  wire [ 2:0] i_psram_wbeat,
+    output wire [31:0] o_psram_wdata,
+    output wire [ 3:0] o_psram_wmask,
+    output wire        o_psram_wlast,
+    input  wire        i_psram_rvalid,
+    input  wire [31:0] i_psram_rdata,
+    input  wire [ 1:0] i_psram_rerr,     // with i_psram_rvalid: a die's word is a filler
     // video (VIDEO=1): pixel clock domain
     input  wire        i_pclk,
     input  wire        i_prst,
@@ -310,16 +309,16 @@ module soc_top #(
   wire [191:0] video_regs;
 
   // SYSCON status words (read at 0x1110_0000 + 4*i), for bring-up:
-  //   0 {30'b0, calib1, calib0}   1/2 PSRAM commands issued, channel 0/1
-  //   3/4 rd_data_valid beats, channel 0/1   5 cache misses   6 cache write-backs   7 0
-  reg [31:0] n_cmd0, n_cmd1, n_rdv0, n_rdv1;
+  //   0 {30'b0, init, init} (3: the PSRAM is ready)   1 PSRAM commands taken
+  //   2 read beats with a filler word (a die missed a word; should stay 0)
+  //   3 read beats   4 0   5 cache misses   6 cache write-backs   7 0
+  reg [31:0] n_cmd, n_fill, n_rdv;
   always @(posedge i_clk)
-    if (i_rst) {n_cmd0, n_cmd1, n_rdv0, n_rdv1} <= 128'd0;
+    if (i_rst) {n_cmd, n_fill, n_rdv} <= 96'd0;
     else begin
-      n_cmd0 <= n_cmd0 + {31'd0, o_cmd_en0};
-      n_cmd1 <= n_cmd1 + {31'd0, o_cmd_en1};
-      n_rdv0 <= n_rdv0 + {31'd0, i_rd_data_valid0};
-      n_rdv1 <= n_rdv1 + {31'd0, i_rd_data_valid1};
+      n_cmd  <= n_cmd + {31'd0, o_psram_cmd_en & i_psram_ready};
+      n_fill <= n_fill + {31'd0, i_psram_rvalid & (i_psram_rerr != 2'b00)};
+      n_rdv  <= n_rdv + {31'd0, i_psram_rvalid};
     end
 
   //   8..13 video CTRL, BASE, STATUS, YOFF, TSTART, CURSOR (video_ctrl.v; 0 without VIDEO)
@@ -335,8 +334,8 @@ module soc_top #(
       .o_poweroff(o_poweroff),
       .o_reboot  (reboot),
       .i_status  ({64'd0, video_regs,
-                   32'd0, cache_writebacks, cache_misses, n_rdv1, n_rdv0, n_cmd1, n_cmd0,
-                   30'd0, i_calib1, i_calib0})
+                   32'd0, cache_writebacks, cache_misses, 32'd0, n_rdv, n_fill, n_cmd,
+                   30'd0, i_psram_init, i_psram_init})
   );
 
   spi_flash_xip flash (
@@ -390,7 +389,6 @@ module soc_top #(
   psram_arb arb (
       .i_clk           (i_clk),
       .i_rst           (i_rst),
-      .i_calib         (i_calib0 & i_calib1),
       .i_c_req         (c_req),
       .i_c_we          (c_we),
       .i_c_adr         (c_adr),
@@ -405,20 +403,17 @@ module soc_top #(
       .o_d_gnt         (d_gnt),
       .o_d_rvalid      (d_rvalid),
       .o_d_rdata       (d_rdata),
-      .o_cmd0          (o_cmd0),
-      .o_cmd_en0       (o_cmd_en0),
-      .o_addr0         (o_addr0),
-      .o_wr_data0      (o_wr_data0),
-      .o_data_mask0    (o_data_mask0),
-      .i_rd_data0      (i_rd_data0),
-      .i_rd_data_valid0(i_rd_data_valid0),
-      .o_cmd1          (o_cmd1),
-      .o_cmd_en1       (o_cmd_en1),
-      .o_addr1         (o_addr1),
-      .o_wr_data1      (o_wr_data1),
-      .o_data_mask1    (o_data_mask1),
-      .i_rd_data1      (i_rd_data1),
-      .i_rd_data_valid1(i_rd_data_valid1)
+      .i_ready         (i_psram_ready),
+      .o_cmd_en        (o_psram_cmd_en),
+      .o_cmd_we        (o_psram_cmd_we),
+      .o_cmd_adr       (o_psram_adr),
+      .i_wnext         (i_psram_wnext),
+      .i_wbeat         (i_psram_wbeat),
+      .o_wdata         (o_psram_wdata),
+      .o_wmask         (o_psram_wmask),
+      .o_wlast         (o_psram_wlast),
+      .i_rvalid        (i_psram_rvalid),
+      .i_rdata         (i_psram_rdata)
   );
 
   // ---------------------------------------------------------------- video

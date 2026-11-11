@@ -1,13 +1,14 @@
-// Unit test for rtl/soc/l1_cache.v + rtl/soc/psram_arb.v against the PSRAM IP user-interface
-// model. A tiny cache (LINES lines) forces constant evictions and write-backs. Random
-// byte/half/word reads and writes go to four cached 4 KB regions spread over both PSRAM
-// channels and to two uncached-only 4 KB regions (one per channel, the 0x9xxx_xxxx alias);
+// Unit test for rtl/soc/l1_cache.v + rtl/soc/psram_arb.v against the PSRAM controller's cycle
+// model (rtl/sim/hyperram_x16_model.v). A tiny cache (LINES lines) forces constant evictions
+// and write-backs. Random byte/half/word reads and writes go to four cached 4 KB regions
+// spread over the 8 MB (both sides of 4 MB, the top) and to two uncached-only 4 KB regions
+// (the 0x9xxx_xxxx alias);
 // every read is checked against a reference memory kept in the testbench. Bus handshake as
 // SERV does it: hold cyc until ack, drop it the next cycle.
-// DMA=1 adds a reader on the arbiter's DMA port that streams 32-byte bursts from a channel-1
+// DMA=1 adds a reader on the arbiter's DMA port that streams 32-byte bursts from a 4 KB
 // region preloaded through the model's backdoor, as video_dma does (two reads outstanding at
 // most, 8 cycles between grants), urgent for 400 cycles of every 2000; every beat is
-// checked. The model's protocol checker (command spacing, write beats) must stay quiet.
+// checked. The model's protocol check (no command while it is not ready) must stay quiet.
 // CMO=1 mixes in cache-block operations (Zicbom: inval/clean/flush) on any byte of a block,
 // cached or uncached. Besides the CPU view (ref_mem) the checks use the PSRAM itself (the
 // model's backdoor): after clean/flush the block in PSRAM equals ref_mem, and the write-back
@@ -39,10 +40,12 @@ module tb_cache;
   wire [31:0] rdt;
   wire        ack;
 
-  wire        calib0, calib1, cmd0, cmd_en0, cmd1, cmd_en1, rdv0, rdv1;
-  wire [20:0] addr0, addr1;
-  wire [31:0] wd0, wd1, rd0, rd1, hits, misses, wbs;
-  wire [ 3:0] dm0, dm1;
+  wire        p_init, p_ready, p_cmd_en, p_cmd_we, p_wnext, p_wlast, p_rvalid;
+  wire [22:2] p_adr;
+  wire [ 2:0] p_wbeat;
+  wire [31:0] p_wdata, p_rdata, hits, misses, wbs;
+  wire [ 3:0] p_wmask;
+  wire [ 1:0] p_rerr;
 
   wire        c_req, c_we, c_gnt, c_rvalid;
   wire [22:2] c_adr;
@@ -61,24 +64,22 @@ module tb_cache;
       .o_hits(hits), .o_misses(misses), .o_writebacks(wbs));
 
   psram_arb arb (
-      .i_clk(clk), .i_rst(rst), .i_calib(calib0 & calib1),
+      .i_clk(clk), .i_rst(rst),
       .i_c_req(c_req), .i_c_we(c_we), .i_c_adr(c_adr), .o_c_gnt(c_gnt),
       .i_c_wdata(c_wdata), .i_c_wmask(c_wmask), .o_c_rvalid(c_rvalid), .o_c_rdata(c_rdata),
       .i_d_req(d_req), .i_d_urgent(d_urgent), .i_d_adr(d_adr), .o_d_gnt(d_gnt),
       .o_d_rvalid(d_rvalid), .o_d_rdata(d_rdata),
-      .o_cmd0(cmd0), .o_cmd_en0(cmd_en0), .o_addr0(addr0), .o_wr_data0(wd0), .o_data_mask0(dm0),
-      .i_rd_data0(rd0), .i_rd_data_valid0(rdv0),
-      .o_cmd1(cmd1), .o_cmd_en1(cmd_en1), .o_addr1(addr1), .o_wr_data1(wd1), .o_data_mask1(dm1),
-      .i_rd_data1(rd1), .i_rd_data_valid1(rdv1));
+      .i_ready(p_ready), .o_cmd_en(p_cmd_en), .o_cmd_we(p_cmd_we), .o_cmd_adr(p_adr),
+      .i_wnext(p_wnext), .i_wbeat(p_wbeat), .o_wdata(p_wdata), .o_wmask(p_wmask),
+      .o_wlast(p_wlast), .i_rvalid(p_rvalid), .i_rdata(p_rdata));
 
-  psram_ui_model #(.CALIB_CYCLES(100)) psram (
-      .clk(clk), .rst_n(!rst),
-      .cmd0(cmd0), .cmd_en0(cmd_en0), .addr0(addr0), .wr_data0(wd0), .data_mask0(dm0),
-      .rd_data0(rd0), .rd_data_valid0(rdv0), .init_calib0(calib0),
-      .cmd1(cmd1), .cmd_en1(cmd_en1), .addr1(addr1), .wr_data1(wd1), .data_mask1(dm1),
-      .rd_data1(rd1), .rd_data_valid1(rdv1), .init_calib1(calib1));
+  hyperram_x16_model #(.INIT_CYCLES(100)) psram (
+      .clk(clk), .rst(rst), .o_init_done(p_init), .o_ready(p_ready),
+      .i_cmd_en(p_cmd_en), .i_cmd_we(p_cmd_we), .i_addr(p_adr), .o_wnext(p_wnext),
+      .o_wbeat(p_wbeat), .i_wdata(p_wdata), .i_wmask(p_wmask), .i_wlast(p_wlast),
+      .o_rvalid(p_rvalid), .o_rdata(p_rdata), .o_rerr(p_rerr));
 
-  // regions 0-3 cached (channel 0 low/high, channel 1 low/high), 4-5 uncached (ch 0 / 1)
+  // regions 0-3 cached (either side of 4 MB, the top), 4-5 uncached
   function [22:0] region_base(input [2:0] r);
     case (r)
       3'd0: region_base = 23'h00_0000;
@@ -89,7 +90,7 @@ module tb_cache;
       default: region_base = 23'h60_0000;
     endcase
   endfunction
-  localparam [22:0] DMA_BASE = 23'h70_0000;     // channel 1, 4 KB, read by the DMA only
+  localparam [22:0] DMA_BASE = 23'h70_0000;     // 4 KB, read by the DMA only
 
   reg [7:0] ref_mem[0:8*4096-1];                // {region, offset[11:0]}
   integer   i, n, errors = 0, reads = 0, writes = 0, ureads = 0, uwrites = 0;
@@ -143,6 +144,9 @@ module tb_cache;
       t_before = dut.tag_ram[blk[5 +: IW]];
       resident = t_before[TW+1] && (t_before[TW-1:0] == blk[22 -: TW]);
       n_cmos = n_cmos + 1;
+      // a write-back from the last access may still be in the controller (its beats are
+      // buffered and written 9..16 cycles after the grant): let it finish first
+      while (psram.busy || p_cmd_en) @(posedge clk);
       if (resident && r < 4) cmo_res = cmo_res + 1;
       if (resident && r < 4 && t_before[TW]) cmo_dirty = cmo_dirty + 1;
       if (r < 4)
@@ -167,7 +171,11 @@ module tb_cache;
       cyc <= 1'b0; cmo <= 1'b0;
       if (wr_grants - wr_before != ((r < 4 && resident && t_before[TW] && op != 2'd0) ? 1 : 0))
         cmo_check("write-back count at the ack");
-      repeat (4) @(posedge clk);                 // the write-back's last beats reach the model
+      // the write-back was granted before the ack (checked above); the controller writes its
+      // beats 9..16 cycles after the grant, ahead of any later command, so a DMA read after
+      // the ack sees them. The backdoor looks once that write is done.
+      repeat (2) @(posedge clk);
+      while (psram.busy || p_cmd_en) @(posedge clk);
       t_after = dut.tag_ram[blk[5 +: IW]];
       if (r >= 4 || !resident) begin
         if (t_after !== t_before) cmo_check("touched a line it does not hold");
@@ -232,9 +240,9 @@ module tb_cache;
   always @(posedge clk) begin
     since = (cyc && !ack) ? since + 1 : 0;
     if (since > 2000) begin
-      $display("FAIL: hang at %0t: adr %06h we %0d unc %0d, cache state %0d, c_req %0d c_gnt %0d, cnt0 %0d cnt1 %0d wcnt %0d, calib %0d%0d, d_req %0d d_urg %0d d_gnt %0d",
-               $time, adr, we, unc, dut.state, c_req, c_gnt, arb.cnt0, arb.cnt1, arb.wcnt,
-               calib0, calib1, d_req, d_urgent, d_gnt);
+      $display("FAIL: hang at %0t: adr %06h we %0d unc %0d, cache state %0d, c_req %0d c_gnt %0d, ready %0d cmd %0d, init %0d, d_req %0d d_urg %0d d_gnt %0d",
+               $time, adr, we, unc, dut.state, c_req, c_gnt, p_ready, p_cmd_en, p_init,
+               d_req, d_urgent, d_gnt);
       $finish;
     end
   end
