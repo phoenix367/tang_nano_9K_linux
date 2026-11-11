@@ -9,9 +9,11 @@ programs (binfmt_flat loads them at runtime-chosen addresses), summed as "<user>
 """
 import argparse
 import bisect
+import os
 from collections import Counter
 
-DEFAULT_MAP = "/mnt/data/build/tang9k_linux/br-tang9k/build/linux-6.18.7/System.map"
+DEFAULT_MAP = os.path.join(os.environ.get("WORK", "/mnt/data/build/tang9k_linux"),
+                           "br-tang9k/build/linux-6.18.7/System.map")
 
 
 def main():

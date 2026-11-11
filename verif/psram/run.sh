@@ -13,7 +13,7 @@
 #                                   then refreshes golden/trace_ip.txt and
 #                                   golden/ip_run.log.
 #
-# Env: OV7670 (default ~/projects/tang_nano_9K_ov7670), GOWIN (default
+# Env: OV7670 (default ~/projects/tang_nano_9K_ov7670), GOWIN (default $GOWIN_PATH, else
 # /mnt/data/Gowin_V1.9.12.02_SP2_linux), OUT (work dir, default verif/psram/build, git-ignored),
 # TCKD (pin-model CK->DQ read delay in ns, default 2.0).
 set -euo pipefail
@@ -22,7 +22,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 MODEL="$ROOT/rtl/sim/psram_ui_model.v"
 OV7670="${OV7670:-$HOME/projects/tang_nano_9K_ov7670}"
-GOWIN="${GOWIN:-/mnt/data/Gowin_V1.9.12.02_SP2_linux}"
+GOWIN="${GOWIN:-${GOWIN_PATH:-/mnt/data/Gowin_V1.9.12.02_SP2_linux}}"
 IPVO="$OV7670/src/psram_memory_interface_hs_2ch/psram_memory_interface_hs_2ch.vo"
 PRIM="$GOWIN/IDE/simlib/gw1n/prim_sim.v"
 OUT="${OUT:-$HERE/build}"

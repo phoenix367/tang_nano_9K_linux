@@ -111,6 +111,33 @@ defaults to `/mnt/data/build/tang9k_linux`. The FPGA build stays in `fpga/`.
 git clone --recursive https://github.com/phoenix367/tang_nano_9K_linux.git
 ```
 
+### Or build in Docker
+
+`docker/bootstrap.sh` builds an Ubuntu 24.04 image with everything except the Gowin tools:
+- Buildroot's host packages;
+- the bare-metal RISC-V GCC;
+- Icarus Verilog and Verilator;
+- Python with pyserial and Pillow;
+- openFPGALoader;
+- the libraries Gowin's tools need.
+
+`docker/run.sh` runs a command in it:
+
+```sh
+docker/bootstrap.sh --gowin-path /path/to/Gowin_V1.9.12.02_SP2_linux   # once; ~1.8 GB image
+docker/run.sh env CONFIG=mmu sw/build.sh          # kernel + DTB
+docker/run.sh env SMODE=1 VIDEO=1 fpga/build.sh   # bitstream (the licence server must be reachable)
+docker/run.sh scripts/ci.sh all                   # the CI checks
+docker/run.sh                                     # a shell
+```
+
+The repository is mounted at `/work`. The Gowin install is mounted read-only at
+`/opt/gowin`; it is never copied into the image. The container's builds go to a directory
+of their own (`/mnt/data/build/tang9k_linux/docker` by default, `--work-dir`), at `/build`
+inside. Buildroot's download cache is shared with the host build when there is one
+(`--dl-dir`). USB and the console UART are passed through, so the board tools work from the
+container too.
+
 ### Build
 
 ```sh

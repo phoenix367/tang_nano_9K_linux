@@ -26,6 +26,9 @@ TCL_SCRIPT="$SCRIPT_DIR/gw_run.tcl"
 
 cd "$GOWIN_PATH"
 export LD_LIBRARY_PATH="./IDE/lib"
-export LD_PRELOAD="/lib/x86_64-linux-gnu/libstdc++.so.6 /lib/x86_64-linux-gnu/libfreetype.so"
+# The system libstdc++ and FreeType, ahead of the older copies in IDE/lib (Gowin's fontconfig
+# use needs FT_Done_MM_Var). libfreetype.so.6 is the runtime library; the unversioned
+# libfreetype.so exists only with libfreetype-dev installed (not in docker/'s image).
+export LD_PRELOAD="/lib/x86_64-linux-gnu/libstdc++.so.6 /lib/x86_64-linux-gnu/libfreetype.so.6"
 export GPRJ STAGE
 exec ./IDE/bin/gw_sh "$TCL_SCRIPT"
