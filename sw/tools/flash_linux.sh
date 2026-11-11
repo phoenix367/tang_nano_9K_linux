@@ -1,26 +1,38 @@
 #!/usr/bin/env bash
-# Write a Linux image to the Tang Nano 9K's external SPI flash for the boot ROM (~1 min).
+# Write a Linux image to the Tang Nano 9K's external SPI flash for the boot ROM (~1 min through
+# Gowin's bridge; ~77 min if it falls back to openFPGALoader).
 #
 #   sw/tools/flash_linux.sh [mmu|nommu]      default mmu (stage 2)
 #
-# Builds the flash image with sw/mkflash.py (mmu: header flag for S-mode boot) and programs
-# it with Gowin's programmer_cli, operation 38 ("exFlash C Bin Erase,Program thru
-# GAO-Bridge"): the programmer loads a bridge design into the FPGA's SRAM and writes the flash
-# through it in ~1 min. openFPGALoader --external-flash bit-bangs SPI over the 6 MHz JTAG and
-# takes ~1 h for the same 2.7 MB. The FPGA's SRAM holds the bridge afterwards, so load the
-# SoC bitstream again or reconfigure from the internal flash (qerv_boot.py --reconfig).
+# Builds the flash image with sw/mkflash.py (mmu: header flag for S-mode boot) and writes it
+# over the board's USB-JTAG cable (its BL702 chip) in one of two ways:
+#  - Gowin's programmer_cli, operation 38 ("exFlash C Bin Erase,Program thru GAO-Bridge"): it
+#    loads a bridge design into the FPGA's SRAM and writes the flash through it in ~1 min. It
+#    often stalls, though, and on 2026-11-11 it failed ~15 times in a row (CLAUDE.md).
+#  - openFPGALoader --external-flash: it bit-bangs SPI over JTAG, ~0.75 KB/s (3.4 MB in 77 min),
+#    but it has not failed so far.
+# METHOD=auto (the default) tries the bridge up to 3 times, then falls back to openFPGALoader.
+# METHOD=bridge stops after the bridge's attempts; METHOD=openfpgaloader skips the bridge.
+# Either way the FPGA no longer runs the SoC afterwards: load the SoC bitstream again or
+# reconfigure from the internal flash (qerv_boot.py --reconfig).
 #
-# Env: GOWIN_PATH (default /mnt/data/Gowin_V1.9.12.02_SP2_linux),
+# Env: METHOD (above), GOWIN_PATH (default /mnt/data/Gowin_V1.9.12.02_SP2_linux),
 #      WORK (default /mnt/data/build/tang9k_linux), SPLASH (boot splash picture; default: the
 #      one sw/tools/mksplash.py draws), JTAG_FREQ (the cable's TCK for the bridge, default
 #      2.5MHz, programmer_cli's own default; it also takes 2MHz, 1.5MHz, 1.1MHz, 0.9MHz,
-#      0.75MHz, 0.5MHz, ...: slower writes take longer, ~70 KB/s at 2.5MHz).
+#      0.75MHz, 0.5MHz, ...: slower writes take longer, ~70 KB/s at 2.5MHz; 1.1MHz didn't cure
+#      the stalls).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 GOWIN_PATH="${GOWIN_PATH:-/mnt/data/Gowin_V1.9.12.02_SP2_linux}"
 WORK="${WORK:-/mnt/data/build/tang9k_linux}"
 JTAG_FREQ="${JTAG_FREQ:-2.5MHz}"
+METHOD="${METHOD:-auto}"
+case "$METHOD" in
+  auto|bridge|openfpgaloader) ;;
+  *) echo "METHOD must be auto, bridge or openfpgaloader" >&2; exit 1 ;;
+esac
 case "${1:-mmu}" in
   mmu)   IMG="$WORK/images-tang9k-mmu" DTB=tang9k-mmu.dtb OPT=--smode ;;
   nommu) IMG="$WORK/images-tang9k" DTB=tang9k.dtb OPT= ;;
@@ -46,55 +58,94 @@ if lib.libusb_kernel_driver_active(h, 0) == 1 and lib.libusb_detach_kernel_drive
 lib.libusb_close(h)
 PY
 }
-cd "$GOWIN_PATH/Programmer/bin"
-# The GAO-bridge write takes ~1 min, but now and then it hangs at the first sector erase
-# ("Erasing sector at 0... 0%"; 5 of 12 runs). The hung runs reported bridge status
-# 0x0003F020, the good ones 0x0001F020; once it hangs, retries in the same state hang too, and
-# reconfiguring the FPGA from its internal flash cleared it. It can also stop partway through
-# programming (once at 43%, for 45 min). So a watchdog stops an attempt whose progress line has
-# not changed for 60 s, and the next attempt first reconfigures (openFPGALoader -r), then
-# detaches ftdi_sio again and rescans the cable; each attempt starts by erasing the SRAM.
+# the log lines of a run without its progress lines
+summary() { tr '\r' '\n' < "$LOG" | sed 's/\x1b\[[0-9;]*m//g' | grep -av '%' | grep -av '^\s*$' || true; }
+written() {
+  echo "flash written ($1); check it with:"
+  echo "  sw/tools/qerv_boot.py --reconfig --hash-flash $IMG/flash.bin"
+  exit 0
+}
 LOG=$(mktemp)
 trap 'rm -f "$LOG"' EXIT
-for attempt in 1 2 3; do
-  if [[ $attempt -gt 1 ]]; then
-    openFPGALoader -b tangnano9k -r > /dev/null 2>&1 || true
-    sleep 1
-  fi
-  detach_jtag
-  # cable-index 4 = "USB Debugger A", the board's BL702; --location from the cable scan
-  LOC=$(./programmer_cli --scan-cables 2>&1 | sed -n 's#.*Cable found:  USB Debugger A/0/\([0-9]*\)/.*#\1#p' | head -1)
-  # SRAM erase; it can hang too (seen after the board was power-cycled), so bound it
-  timeout -s KILL 30 ./programmer_cli --device GW1NR-9C --run 24 --cable-index 4 \
-      --location "${LOC:-0}" --frequency "$JTAG_FREQ" > /dev/null 2>&1 \
-      || echo "attempt $attempt: SRAM erase failed or hung"
-  echo "attempt $attempt: writing at TCK $JTAG_FREQ"
-  ./programmer_cli --device GW1NR-9C --run 38 --mcuFile "$IMG/flash.bin" --spiaddr 0x000000 \
-      --cable-index 4 --location "${LOC:-0}" --frequency "$JTAG_FREQ" > "$LOG" 2>&1 &
-  PID=$!
-  stall=0 last=
-  while kill -0 "$PID" 2>/dev/null; do
-    sleep 5
-    cur=$(tr '\r' '\n' < "$LOG" | grep -a '%' | tail -1 || true)
-    if [[ "$cur" != "$last" ]]; then
-      last=$cur stall=0
-    else
-      stall=$((stall + 5))
-      if [[ $stall -ge 60 ]]; then
-        echo "attempt $attempt: GAO bridge stuck${cur:+ at ${cur%%:*} ${cur##* }}, retrying"
-        # stuck there, programmer_cli ignores SIGTERM; and under set -e a kill of a process
-        # that is already gone would end the script
-        kill -9 "$PID" 2>/dev/null || true
-        break
+
+if [[ $METHOD != openfpgaloader ]]; then
+  # The GAO-bridge write takes ~1 min, but now and then it hangs at the first sector erase
+  # ("Erasing sector at 0... 0%"; 5 of 12 runs). The hung runs reported bridge status
+  # 0x0003F020, the good ones 0x0001F020; once it hangs, retries in the same state hang too,
+  # and reconfiguring the FPGA from its internal flash cleared it. It can also stop partway
+  # through programming (once at 43%, for 45 min). So a watchdog stops an attempt whose
+  # progress line has not changed for 60 s, and the next attempt first reconfigures
+  # (openFPGALoader -r), then detaches ftdi_sio again and rescans the cable; each attempt
+  # starts by erasing the SRAM.
+  cd "$GOWIN_PATH/Programmer/bin"
+  for attempt in 1 2 3; do
+    if [[ $attempt -gt 1 ]]; then
+      openFPGALoader -b tangnano9k -r > /dev/null 2>&1 || true
+      sleep 1
+    fi
+    detach_jtag
+    # cable-index 4 = "USB Debugger A", the board's BL702; --location from the cable scan
+    LOC=$(./programmer_cli --scan-cables 2>&1 | sed -n 's#.*Cable found:  USB Debugger A/0/\([0-9]*\)/.*#\1#p' | head -1)
+    # SRAM erase; it can hang too (seen after the board was power-cycled), so bound it
+    timeout -s KILL 30 ./programmer_cli --device GW1NR-9C --run 24 --cable-index 4 \
+        --location "${LOC:-0}" --frequency "$JTAG_FREQ" > /dev/null 2>&1 \
+        || echo "attempt $attempt: SRAM erase failed or hung"
+    echo "attempt $attempt: writing at TCK $JTAG_FREQ"
+    ./programmer_cli --device GW1NR-9C --run 38 --mcuFile "$IMG/flash.bin" --spiaddr 0x000000 \
+        --cable-index 4 --location "${LOC:-0}" --frequency "$JTAG_FREQ" > "$LOG" 2>&1 &
+    PID=$!
+    stall=0 last=
+    while kill -0 "$PID" 2>/dev/null; do
+      sleep 5
+      cur=$(tr '\r' '\n' < "$LOG" | grep -a '%' | tail -1 || true)
+      if [[ "$cur" != "$last" ]]; then
+        last=$cur stall=0
+      else
+        stall=$((stall + 5))
+        if [[ $stall -ge 60 ]]; then
+          echo "attempt $attempt: GAO bridge stuck${cur:+ at ${cur%%:*} ${cur##* }}, retrying"
+          # stuck there, programmer_cli ignores SIGTERM; and under set -e a kill of a process
+          # that is already gone would end the script
+          kill -9 "$PID" 2>/dev/null || true
+          break
+        fi
       fi
+    done
+    wait "$PID" || true
+    if grep -q "Program flash finished" "$LOG"; then
+      summary
+      written "GAO bridge"
     fi
   done
-  wait "$PID" || true
-  if grep -q "Program flash finished" "$LOG"; then
-    tr '\r' '\n' < "$LOG" | grep -av '%' | grep -av '^\s*$'
-    exit 0
+  summary | tail -5
+  echo "GAO bridge: flash write failed after 3 attempts" >&2
+  if [[ $METHOD == bridge ]]; then
+    echo "the SPI flash is now erased or partial: METHOD=openfpgaloader writes it slowly" >&2
+    exit 1
+  fi
+fi
+
+# openFPGALoader through the same cable, without Gowin's bridge. It runs as long as it needs:
+# no watchdog (it hasn't stalled), but its progress is shown at each phase and every 10%.
+SIZE=$(stat -c %s "$IMG/flash.bin")
+echo "openFPGALoader: writing $SIZE B, about $((SIZE / 750 / 60 + 1)) min from $(date +%H:%M)"
+openFPGALoader -b tangnano9k --external-flash -f "$IMG/flash.bin" > "$LOG" 2>&1 &
+PID=$!
+re='^ *(.*[^ ]): *\[.*\] *([0-9]+)'      # "Writing: [=====     ] 45.23%"
+phase= pct_shown=0
+while kill -0 "$PID" 2>/dev/null; do
+  sleep 5
+  cur=$(tr '\r' '\n' < "$LOG" | sed 's/\x1b\[[0-9;]*m//g' | grep -a '%' | tail -1 || true)
+  [[ $cur =~ $re ]] || continue
+  if [[ ${BASH_REMATCH[1]} != "$phase" || ${BASH_REMATCH[2]} -ge $((pct_shown + 10)) ]]; then
+    phase=${BASH_REMATCH[1]} pct_shown=${BASH_REMATCH[2]}
+    echo "openFPGALoader: $phase $pct_shown% ($(date +%H:%M))"
   fi
 done
-tr '\r' '\n' < "$LOG" | grep -av '%' | grep -av '^\s*$' | tail -5
-echo "flash write failed after 3 attempts" >&2
+if wait "$PID"; then
+  summary
+  written "openFPGALoader"
+fi
+summary | tail -5
+echo "openFPGALoader: flash write failed; the SPI flash is erased or partial" >&2
 exit 1

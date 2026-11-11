@@ -168,10 +168,10 @@ if it exists.
     erases the SRAM configuration first.
   - **Writing the external flash:** `sw/tools/flash_linux.sh [mmu|nommu]` (~1 min) runs
     mkflash and Gowin `programmer_cli --run 38` (exFlash C Bin through the GAO bridge,
-    `--cable-index 4` = "USB Debugger A"). The fallback when the bridge keeps failing is
-    `openFPGALoader -b tangnano9k --external-flash -f <flash.bin>`: it bit-bangs SPI over
-    JTAG at ~0.75 KB/s (3.4 MB in 77 min) but has not failed. Gotchas, all handled by the
-    script:
+    `--cable-index 4` = "USB Debugger A"). After 3 failed bridge attempts it falls back to
+    `openFPGALoader -b tangnano9k --external-flash -f <flash.bin>`, which bit-bangs SPI over
+    JTAG at ~0.75 KB/s (3.4 MB in 77 min) but has not failed. `METHOD=auto` (default),
+    `bridge` or `openfpgaloader` picks the path. Gotchas, all handled by the script:
     - `programmer_cli` cannot open the JTAG channel while the kernel's `ftdi_sio` holds
       it (`/dev/ttyUSB0`). openFPGALoader re-attaches it on exit, so the script detaches
       it via libusb.

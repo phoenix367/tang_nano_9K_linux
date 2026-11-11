@@ -96,21 +96,21 @@ sw/tools/qerv_boot.py --bitstream <fs> --linux --mmu --timeout 120 --log <log> -
      progress hasn't moved for 60 s, reconfigures the FPGA and tries again, up to 3 times.
      Don't kill the script from outside: that leaves `programmer_cli` holding the cable and
      the flash half-written.
-   - Success is exit 0 with `Program flash finished` in the log.
-   - On `flash write failed after 3 attempts`, the bridge is wedged. Tell the user the SPI
-     flash is now erased or partial, so the board boots no Linux until a write succeeds.
-     The boot ROM still starts and a RAM boot still works. Ask them to unplug and replug
-     the board's USB, then run again right away, before anything opens `/dev/ttyUSB1`
-     (the BL702 turns JTAG off while its UART is in use; that a fresh plug helps is a
-     guess, but it costs nothing).
-   - If that fails too, stop retrying the bridge: on 2026-11-11 it failed about 15 times in
-     a row, at any TCK. Offer the slow path that worked, over the same cable:
-     ```
-     openFPGALoader -b tangnano9k --external-flash -f /mnt/data/build/tang9k_linux/images-tang9k-mmu/flash.bin
-     ```
-     It takes ~77 min for 3.4 MB, so run it in the background and say so. It erases the
-     FPGA's SRAM too.
-3. **Verify.** Afterwards the FPGA's SRAM holds Gowin's bridge, not the SoC.
+   - Success is exit 0 with `flash written (GAO bridge)` or `flash written (openFPGALoader)`
+     at the end of the log.
+   - After 3 failed bridge attempts (`GAO bridge: flash write failed after 3 attempts`) the
+     script falls back to openFPGALoader `--external-flash` by itself. That path has not
+     failed so far, but it takes ~77 min for 3.4 MB (it prints its progress every 10%).
+     Tell the user the write is on the slow path and when it should end. If it fails too,
+     tell the user the SPI flash is erased or partial, so the board boots no Linux until a
+     write succeeds (the boot ROM still starts and a RAM boot still works).
+   - `METHOD=bridge` stops after the bridge's attempts instead (exit 1), e.g. to try a USB
+     replug first: unplug and replug, then run again before anything opens `/dev/ttyUSB1`
+     (the BL702 turns JTAG off while its UART is in use; that this helps is untested).
+     `METHOD=openfpgaloader` skips the bridge: on 2026-11-11 it failed about 15 times in a
+     row, at any TCK.
+3. **Verify.** Afterwards the FPGA no longer runs the SoC (it holds Gowin's bridge, or
+   openFPGALoader erased it).
    - If the internal flash holds the matching bitstream (or you write it now, after this,
      with `upload-bitstream`), boot the power-up path:
      ```
