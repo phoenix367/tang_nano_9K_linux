@@ -406,7 +406,8 @@ took 55 s. Three changes, in order:
     scroll moves TSTART and clears the new rows. A partial scroll rewrites the region from
     the VT's buffer. The screen keeps the boot ROM's splash until the first character
     other than a blank, and shows the framebuffer while a program has the VT in
-    KD_GRAPHICS.
+    KD_GRAPHICS. Its init sets the default CP437 Unicode map (taking over a VT frees it;
+    until 2026-11-11 every non-ASCII character fell back to ASCII).
   - **Fit:** 69% logic, BSRAM 24/26, Fmax 44.9 MHz (CPU, at 42) and 27.8 MHz (pixel,
     at 25.2), TNS 0.
   - **Tests:** `verif/video/run.sh` checks text frames against a reference model

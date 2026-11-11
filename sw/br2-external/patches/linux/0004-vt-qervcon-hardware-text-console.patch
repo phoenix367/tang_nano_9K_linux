@@ -37,7 +37,7 @@ diff -Naur a/drivers/video/console/Makefile b/drivers/video/console/Makefile
 diff -Naur a/drivers/video/console/qervcon.c b/drivers/video/console/qervcon.c
 --- a/drivers/video/console/qervcon.c
 +++ b/drivers/video/console/qervcon.c
-@@ -0,0 +1,224 @@
+@@ -0,0 +1,231 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * QERV SoC (Tang Nano 9K) text console.
@@ -108,6 +108,13 @@ diff -Naur a/drivers/video/console/qervcon.c b/drivers/video/console/qervcon.c
 +	vc->vc_can_do_color = 1;
 +	vc->vc_complement_mask = 0x7700;
 +	vc->vc_hi_font_mask = 0;
++	/*
++	 * Taking over a VT frees its Unicode map (visual_init); without one every
++	 * non-ASCII character falls back to ASCII. The font is CP437, which the
++	 * default map describes (as vgacon and fbcon set it up).
++	 */
++	if (!*vc->uni_pagedict_loc)
++		con_set_default_unimap(vc);
 +	if (init) {
 +		vc->vc_cols = QERV_COLS;
 +		vc->vc_rows = QERV_ROWS;
