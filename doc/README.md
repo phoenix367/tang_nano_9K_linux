@@ -47,6 +47,7 @@ graph LR
 | [stage2_plan.md](stage2_plan.md) | Stage 2, SV32 Linux in S-mode: the privilege modes, the MMU, the SBI shim, boot-time work |
 | [video_plan.md](video_plan.md) | HDMI: the video controller, the PSRAM arbiter, the boot splash, the text console |
 | [peripherals.md](peripherals.md) | I2C and the microSD card: drivers, hardware CRC, measurements, the open write problem |
+| [performance.md](performance.md) | Measured on the board under Linux (qperf): cycles per instruction class, the timer tick's share, kernel paths (syscall, pipe, fork, exec, page fault), memory latency by working set, bandwidth, the direct-mapped cache's page-colour effects |
 | [psram_controller.md](psram_controller.md) | The 16-bit PSRAM controller in the SoC (it replaced the Gowin IP on 2026-11-11): design, bus timing, the arbiter and video DMA around it, verification, what the board showed (pins, CR0, phase window), the probe, cost and throughput |
 
 Elsewhere in the repository:
@@ -64,8 +65,8 @@ Elsewhere in the repository:
 - **Device:** Gowin GW1NR-LV9QN88PC6/I5 (8,640 LUT4, 26 BSRAM, 2 rPLLs).
   `GOWIN_PATH=/mnt/data/Gowin_V1.9.12.02_SP2_linux`.
 - **CPU:** QERV = Sparrow-SERV `W=4 LINUX=1 SMODE=1` + MDU + AMO unit + SV32 MMU. One hart,
-  M/S/U, RV32IMA_Zicsr_Zifencei_Zicbom. About 12 cycles per ALU instruction, 22 per
-  load/store.
+  M/S/U, RV32IMA_Zicsr_Zifencei_Zicbom. 13 cycles per ALU instruction, 24 per load/store on
+  the board (12 and 22 in simulation with an ideal bus; `performance.md`).
 - **Clocks:** 27 MHz crystal → rPLL → CPU, SoC and PSRAM controller 42 MHz, plus the PSRAM's
   CK clock, the same 90° later; video 126 MHz → pixel clock 25.2 MHz.
 - **Memory:** 8 MB PSRAM (two 4 MB dies, run in lockstep as one 16-bit bus by the project's

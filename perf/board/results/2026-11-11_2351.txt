@@ -1,0 +1,62 @@
+# 2026-11-11_2351  Linux (none) 6.18.7 #7 Wed Nov 11 20:21:04 +04 2026 riscv32 GNU/Linux
+# boot: (attached); qperf md5 9e2e4169ca983e74e84646e3199f3a56
+# qperf: CPU 42 MHz assumed; timer rdtime (1 MHz); SoC counters yes; page colours yes
+cpu.add                         13.002 cycles  0.310 us; simulation with a 1-cycle bus: 12
+cpu.lui                         13.022 cycles  0.310 us; simulation with a 1-cycle bus: 12
+cpu.slt                         21.000 cycles  0.500 us; simulation with a 1-cycle bus: 20
+cpu.slli                        21.103 cycles  0.502 us; simulation with a 1-cycle bus: 20
+cpu.srli_1                      20.959 cycles  0.499 us; simulation with a 1-cycle bus: 20
+cpu.srli_16                     25.081 cycles  0.597 us; simulation with a 1-cycle bus: 24
+cpu.srli_31                     27.993 cycles  0.667 us; simulation with a 1-cycle bus: 27
+cpu.branch_not_taken            21.000 cycles  0.500 us; simulation with a 1-cycle bus: 20
+cpu.branch_taken                21.000 cycles  0.500 us; simulation with a 1-cycle bus: 20
+cpu.jal                         21.000 cycles  0.500 us; simulation with a 1-cycle bus: 20
+cpu.lw                          24.015 cycles  0.572 us; simulation with a 1-cycle bus: 22
+cpu.lb                          23.994 cycles  0.571 us; simulation with a 1-cycle bus: 22
+cpu.sw                          23.625 cycles  0.563 us; simulation with a 1-cycle bus: 22
+cpu.sb                          23.871 cycles  0.568 us; simulation with a 1-cycle bus: 22
+cpu.mul                         23.994 cycles  0.571 us; simulation with a 1-cycle bus: 23
+cpu.mulh                        23.994 cycles  0.571 us; simulation with a 1-cycle bus: 23
+cpu.div                         55.986 cycles  1.333 us; simulation with a 1-cycle bus: 55
+cpu.amoadd                      28.998 cycles  0.690 us; simulation with a 1-cycle bus: 26
+cpu.lr_sc_pair                  51.023 cycles  1.215 us; simulation with a 1-cycle bus: 23 + 23-24
+cpu.rdtime                      13.002 cycles  0.310 us; simulation with a 1-cycle bus: 12 (a CSR read)
+cpu.fence                       13.002 cycles  0.310 us; simulation with a 1-cycle bus: - (a no-op)
+cpu.crc32                      229.410 KB/s    best; avg 112.9 KB/s (table-driven, 1 KB)
+cpu.qsort                     1023.316 ms      avg; 2048 ints, libc qsort
+os.tick_share                   36.672 %       of a busy loop's time goes to the kernel (the 100 Hz tick) and other tasks
+os.tick_cost                  3667.203 us      per tick (154023 cycles); 688 cache misses, 79 write-backs per tick
+os.syscall                     184.596 us      avg; best 136.200 (5.72e+03 cycles, 12 misses); getppid()
+os.clock_gettime               348.693 us      avg; best 270.600 (1.14e+04 cycles, 10 misses); CLOCK_MONOTONIC
+os.pipe_round_trip           19437.807 us      avg; best 9034.000 (3.79e+05 cycles, 2217 misses); 1 byte there and back between 2 processes (4 syscalls, 2 switches)
+os.yield_round_trip           5806.056 us      avg; best 851.000 (3.57e+04 cycles, 194 misses); sched_yield() with a second process yielding back (2 syscalls, 2 switches)
+os.fork                         81.526 ms      avg; best 75.781 (3.18e+06 cycles, 16773 misses); fork + _exit + waitpid
+os.exec                        184.851 ms      avg; best 179.203 (7.53e+06 cycles, 38200 misses); vfork + exec /bin/true (busybox) + waitpid
+os.page_fault                 7251.859 us      avg; best 3282.000 (1.38e+05 cycles, 698 misses); first write to an anonymous page (a zeroed frame), mmap/munmap included
+os.tmpfs_write                 569.512 KB/s    avg; 128 KB in 4 KB writes
+os.tmpfs_read                 1104.343 KB/s    avg; 128 KB in 4 KB reads
+mem.latency_2k                  26.496 cycles  0.631 us per load; 0.00 misses, 0.00 write-backs per load (64 of 64 lines)
+mem.latency_4k                  27.891 cycles  0.664 us per load; 0.03 misses, 0.01 write-backs per load (121 of 128 lines)
+mem.latency_8k                  36.094 cycles  0.859 us per load; 0.02 misses, 0.00 write-backs per load (249 of 256 lines)
+mem.latency_12k                 31.336 cycles  0.746 us per load; 0.10 misses, 0.01 write-backs per load (377 of 384 lines)
+mem.latency_16k                 28.772 cycles  0.685 us per load; 0.03 misses, 0.00 write-backs per load (505 of 512 lines)
+mem.latency_20k                 39.129 cycles  0.932 us per load; 0.41 misses, 0.00 write-backs per load (626 of 640 lines)
+mem.latency_24k                 46.594 cycles  1.109 us per load; 0.67 misses, 0.01 write-backs per load (754 of 768 lines)
+mem.latency_32k                 55.576 cycles  1.323 us per load; 1.01 misses, 0.00 write-backs per load (1010 of 1024 lines)
+mem.latency_64k                 55.658 cycles  1.325 us per load; 1.01 misses, 0.00 write-backs per load (2020 of 2048 lines)
+mem.latency_128k                55.699 cycles  1.326 us per load; 1.01 misses, 0.00 write-backs per load (4040 of 4096 lines)
+mem.latency_256k                56.438 cycles  1.344 us per load; 1.01 misses, 0.00 write-backs per load (8080 of 8192 lines)
+mem.latency_512k                55.945 cycles  1.332 us per load; 1.01 misses, 0.00 write-backs per load (16160 of 16384 lines)
+mem.latency_1024k               62.508 cycles  1.488 us per load; 1.06 misses, 0.00 write-backs per load (32320 of 32768 lines)
+mem.read_8k                   3825.921 KB/s    word loads, in the cache; 0.17 misses, 0.00 write-backs per 32 B
+mem.write_8k                  5681.818 KB/s    word stores, in the cache; 0.02 misses, 0.00 write-backs per 32 B
+mem.memcpy_4k                 1694.197 KB/s    libc memcpy, 4 KB, in the cache; 0.08 misses, 0.05 write-backs per 32 B
+mem.memset_8k                 5171.299 KB/s    libc memset, in the cache; 0.03 misses, 0.02 write-backs per 32 B
+mem.read_1m                   3577.818 KB/s    word loads from PSRAM; 1.04 misses, 0.00 write-backs per 32 B
+mem.write_1m                  4987.531 KB/s    word stores to PSRAM (write-allocate); 1.04 misses, 0.23 write-backs per 32 B
+mem.memset_1m                 4602.992 KB/s    libc memset to PSRAM; 1.04 misses, 0.21 write-backs per 32 B
+mem.memcpy_512k_conflict       904.364 KB/s    libc memcpy, source and destination pages of the same colours (thrashing); 14.05 misses, 6.20 write-backs per 32 B
+mem.memcpy_512k               1289.491 KB/s    libc memcpy, PSRAM to PSRAM, pages of different colours; 2.42 misses, 0.25 write-backs per 32 B
+mem.fb_write                  5693.950 KB/s    word stores to /dev/fb0 (uncached); 0.01 misses, 0.00 write-backs per 32 B
+mem.fb_read                   2764.340 KB/s    word loads from /dev/fb0 (uncached); 0.01 misses, 0.00 write-backs per 32 B
+# done in 75.1 s

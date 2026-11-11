@@ -212,7 +212,7 @@ the board nor a kernel build. GitHub Actions runs it on every push
 | `sim/soc/` | Whole-SoC Verilator simulation and profiling |
 | `verif/` | Unit tests |
 | `fit/` | Fit probes: one CPU core alone on this FPGA, for its size and Fmax |
-| `perf/` | Boot-time model: CPI measurement and emulator traces |
+| `perf/` | Boot-time model (CPI measurement, emulator traces) and the on-board benchmarks (`perf/board/`) |
 | `doc/` | Architecture, plans and results (`doc/README.md` is the map) |
 | `external/` | Submodules |
 | `.claude/skills/` | Claude Code skills for loading kernels and bitstreams |
@@ -229,6 +229,7 @@ the board nor a kernel build. GitHub Actions runs it on every push
 - `doc/video_plan.md`: HDMI video and the text console.
 - `doc/peripherals.md`: I2C and the microSD card.
 - `doc/psram_controller.md`: the 16-bit PSRAM controller.
+- `doc/performance.md`: benchmark results from the board (CPU, kernel, memory).
 - `CLAUDE.md`: detailed working notes, with build commands, hardware gotchas and
   measurements. The project is developed with Claude Code, and this file is its memory.
 
