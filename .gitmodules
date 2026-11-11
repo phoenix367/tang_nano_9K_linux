@@ -1,5 +1,5 @@
-[submodule "external/serv"]
-	path = external/serv
+[submodule "external/sparrow-serv"]
+	path = external/sparrow-serv
 	url = https://github.com/phoenix367/sparrow-serv.git
 	branch = qerv-linux
 [submodule "external/mdu"]

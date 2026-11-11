@@ -605,8 +605,8 @@ fixed under `LINUX=1`.
 - **linux-on-litex-vexriscv**: VexRiscv with MMU on LiteX. It needs 32 MB, or 8 MB when the
   rootfs is on SD. It supports the Tang Nano 20K, not the 9K. litex-boards has a
   `sipeed_tang_nano_9k` target, but its HyperRAM support is not mainline-clean.
-- **SERV** (olofk/serv, submodule `external/serv`; its M-extension unit is `external/mdu`,
-  zeeshanrafique23/mdu). Bit-serial, already proven on this chip in the ov7670 reference.
+- **SERV** (olofk/serv; our fork is the submodule `external/sparrow-serv`, below; its
+  M-extension unit is `external/mdu`, zeeshanrafique23/mdu). Bit-serial, already proven on this chip in the ov7670 reference.
   Upstream also has a `tangnano9k` servant target (`servant.core`). Today it has:
   - RV32I; M via the external MDU (`MDU=1`); optional C; `W=1` or `W=4` (QERV, NEWS 1.4.0).
   - M-mode only, with mstatus MIE/MPIE, mie.MTIE, mcause, and mtvec/mscratch/mepc/mtval kept
@@ -617,7 +617,7 @@ fixed under `LINUX=1`.
   partly decoded (`serv_decode.v`), so e.g. `mhartid` aliases another CSR. It can't run
   Linux as-is.
 
-  **Our fork:** `external/serv` is Sparrow-SERV, branch `qerv-linux` of
+  **Our fork:** `external/sparrow-serv` is Sparrow-SERV, branch `qerv-linux` of
   `github.com/phoenix367/sparrow-serv` (its README describes the changes). In the submodule,
   `origin` is the fork (fetch over HTTPS, push over SSH) and `upstream` is olofk/serv. A
   change there is committed and pushed in the fork first, then the new submodule pointer is

@@ -1,4 +1,4 @@
-// QERV-Linux CPU: SERV (external/serv, qerv-linux branch) with LINUX=1, the MDU for the M
+// QERV-Linux CPU: Sparrow-SERV (external/sparrow-serv) with LINUX=1, the MDU for the M
 // extension and the AMO unit for the A extension. ISA: RV32IMA_Zicsr_Zifencei_Zicbom, M and
 // U modes, timer interrupt, no MMU. See doc/stage1_plan.md (M1).
 // Zicbom: cbo.clean/flush/inval leave on the data bus as a read with o_dbus_cmo set

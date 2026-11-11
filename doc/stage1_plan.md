@@ -160,7 +160,7 @@ These changes are made in a SERV fork:
 Verification:
 - **Lockstep ISS:** extend `perf/serv_cpi/iss.py` and the lockstep testbench with A, U-mode,
   CSR semantics and the no-op fences/wfi, and add directed tests for each.
-- **Compliance:** run riscv-arch-test via SERV's RISCOF plugin (`external/serv/verif`) for
+- **Compliance:** run riscv-arch-test via SERV's RISCOF plugin (`external/sparrow-serv/verif`) for
   rv32i/m/a. riscv-formal (SERV has RVFI) is optional.
 - **Measurements:** re-run `fit/qerv` (LUT/Fmax delta) and `perf/serv_cpi` (cycle costs for
   AMO/LR/SC).

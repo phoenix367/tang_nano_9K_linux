@@ -32,9 +32,9 @@ rm -rf "$B"
 mkdir -p "$B"
 
 RTL="$REPO/rtl/qerv/qerv_cpu.v $REPO/rtl/qerv/amo_unit.v $REPO/rtl/qerv/sv32_mmu.v \
-     $(ls "$REPO"/external/serv/rtl/*.v | grep -v serv_synth_wrapper) \
+     $(ls "$REPO"/external/sparrow-serv/rtl/*.v | grep -v serv_synth_wrapper) \
      $REPO/external/mdu/rtl/mdu_top.v \
-     $REPO/external/serv/servile/servile_arbiter.v $REPO/external/serv/servant/servant_ram.v"
+     $REPO/external/sparrow-serv/servile/servile_arbiter.v $REPO/external/sparrow-serv/servant/servant_ram.v"
 
 for W in $WIDTHS; do
   iverilog -g2012 -s qerv_tb -o "$B/tb_w$W.vvp" -P qerv_tb.W=$W -P qerv_tb.SMODE=$SMODE -P qerv_tb.MEMSIZE=$MEMSIZE -P qerv_tb.TIMEOUT=2000000 \

@@ -16,9 +16,9 @@ MEMSIZE=65536
 
 mkdir -p "$B"
 RTL="$REPO/rtl/qerv/qerv_cpu.v $REPO/rtl/qerv/amo_unit.v $REPO/rtl/qerv/sv32_mmu.v \
-     $(ls "$REPO"/external/serv/rtl/*.v | grep -v serv_synth_wrapper) \
+     $(ls "$REPO"/external/sparrow-serv/rtl/*.v | grep -v serv_synth_wrapper) \
      $REPO/external/mdu/rtl/mdu_top.v \
-     $REPO/external/serv/servile/servile_arbiter.v $REPO/external/serv/servant/servant_ram.v"
+     $REPO/external/sparrow-serv/servile/servile_arbiter.v $REPO/external/sparrow-serv/servant/servant_ram.v"
 
 status=0
 for src in "$HERE"/tests/*.S; do

@@ -191,7 +191,7 @@ that.
 
 This repository is under the MIT license (`LICENSE`), with these exceptions:
 
-- `external/serv`: [Sparrow-SERV](https://github.com/phoenix367/sparrow-serv), under ISC
+- `external/sparrow-serv`: [Sparrow-SERV](https://github.com/phoenix367/sparrow-serv), under ISC
   like SERV, by Olof Kindgren.
 - `external/mdu`: the M-extension unit for SERV, under Apache-2.0.
 - `rtl/i2c/`: the OpenCores I2C master by Richard Herveille, under its original notice.

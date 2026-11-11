@@ -38,9 +38,9 @@ echo "== reference ISS"
 python3 iss.py "$B/serv_cpi_tests.bin" "$B/iss.json"
 
 echo "== compile testbenches (iverilog)"
-RTL=$(ls "$REPO"/external/serv/rtl/*.v | grep -v serv_synth_wrapper)
+RTL=$(ls "$REPO"/external/sparrow-serv/rtl/*.v | grep -v serv_synth_wrapper)
 SRCS="$HERE/tb/serv_cpi_tb.v $RTL $REPO/external/mdu/rtl/mdu_top.v \
-      $REPO/external/serv/servile/servile_arbiter.v $REPO/external/serv/servant/servant_ram.v"
+      $REPO/external/sparrow-serv/servile/servile_arbiter.v $REPO/external/sparrow-serv/servant/servant_ram.v"
 LATS="0"
 [ "$LATENCY_RUNS" = "1" ] && LATS="0 1"
 pids=()
